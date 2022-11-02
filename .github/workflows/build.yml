@@ -45,7 +45,7 @@ jobs:
           mkdir install
           cd build
           cmake -DCMAKE_INSTALL_PREFIX=../install ../root
-          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} cmake -G Ninja, ninja
+          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} cmake --build .
       - name: Run sonar-scanner
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

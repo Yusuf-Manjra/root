@@ -40,12 +40,13 @@ jobs:
         run: |
           npm install --global xpm@latest
           sudo apt-get install libxpm-dev
+          sudo apt-get install ninja-build
           cd ../
           mkdir build
           mkdir install
           cd build
           cmake -DCMAKE_INSTALL_PREFIX=../install ../root
-          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} cmake --build .
+          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} cmake -G Ninja, ninja
       - name: Run sonar-scanner
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

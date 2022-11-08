@@ -38,8 +38,7 @@ jobs:
           echo "$HOME/.sonar/build-wrapper-linux-x86" >> $GITHUB_PATH
       - name: Run build-wrapper
         run: |
-          npm install --global xpm@latest
-          sudo apt-get install libxpm-dev
+          sudo apt-get -ys install libxpm-dev
           cd ../
           mkdir build
           cd build

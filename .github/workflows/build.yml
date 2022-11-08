@@ -40,8 +40,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get -ys install libxpm-dev
-          mkdir build
-          cd build
+          mkdir root_build
+          cd root_build
           build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} cmake --build . --clean-first
       - name: Run sonar-scanner
         env:

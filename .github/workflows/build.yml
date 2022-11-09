@@ -36,10 +36,13 @@ jobs:
           curl -sSLo $HOME/.sonar/build-wrapper-linux-x86.zip ${{ env.BUILD_WRAPPER_DOWNLOAD_URL }}
           unzip -o $HOME/.sonar/build-wrapper-linux-x86.zip -d $HOME/.sonar/
           echo "$HOME/.sonar/build-wrapper-linux-x86" >> $GITHUB_PATH
-      - name: Run build-wrapper
+      - name: Setup & Check Location Of Dependancies
         run: |
           sudo apt-get update
           sudo apt-get -ys install libxpm-dev
+          dpkg -L libxpm-dev
+      - name: Run build-wrapper
+        run: |
           mkdir root_build
           cmake -S . -B ./root_build
           build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} cmake --build ./root_build --clean-first

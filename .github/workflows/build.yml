@@ -39,7 +39,7 @@ jobs:
       - name: Setup & Check Location Of Dependancies
         run: |
           sudo apt-get update
-          sudo apt-get -ys install libxpm-dev
+          sudo apt install libxpm-dev
           dpkg -L libxpm-dev
       - name: Run build-wrapper
         run: |

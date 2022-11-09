@@ -5,11 +5,13 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
                'sap/ui/Device',
                'sap/ui/model/json/JSONModel',
                'sap/ui/table/Column',
+               'sap/ui/table/TreeTable',
                'sap/ui/layout/HorizontalLayout',
                'sap/m/TabContainerItem',
                'sap/m/MessageToast',
                'sap/m/MessageBox',
                'sap/m/Text',
+               'sap/m/TextArea',
                'sap/m/Page',
                'sap/ui/core/mvc/XMLView',
                'sap/ui/core/Icon',
@@ -23,6 +25,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
                'sap/tnt/ToolHeader',
                'sap/m/ToolbarSpacer',
                'sap/m/OverflowToolbarLayoutData',
+               'sap/m/ScrollContainer',
                'rootui5/browser/controller/FileDialog.controller'
 ],function(Controller,
            Link,
@@ -31,11 +34,13 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
            uiDevice,
            JSONModel,
            tableColumn,
+           TreeTable,
            HorizontalLayout,
            TabContainerItem,
            MessageToast,
            MessageBox,
            mText,
+           mTextArea,
            mPage,
            XMLView,
            CoreIcon,
@@ -49,6 +54,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
            ToolHeader,
            ToolbarSpacer,
            OverflowToolbarLayoutData,
+           ScrollContainer,
            FileDialogController) {
 
    "use strict";
@@ -251,6 +257,10 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
          }, this);
       },
 
+      /* =========================================== */
+      /* =============== Image Viewer ============== */
+      /* =========================================== */
+
       createImageViewer(dummy_url, name, title, tooltip) {
          let oTabContainer = this.getView().byId("tabContainer"),
              image = new Image({ src: "", densityAware: false });
@@ -309,6 +319,157 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
 
          return item;
       },
+
+      /* =========================================== */
+      /* =============== Info Viewer =============== */
+      /* =========================================== */
+
+      createInfoViewer(dummy_url, name, title, tooltip) {
+         const oTabContainer = this.getView().byId("tabContainer");
+
+         let item = new TabContainerItem(name, {
+            icon: "sap-icon://hint",
+            name: "Globals",
+            key: name,
+            additionalText: "{/title}",
+            tooltip: tooltip || ''
+         });
+
+         let table = new TreeTable({
+            width: "100%",
+            editable: false,
+            columnHeaderVisible : true,
+            visibleRowCountMode: 'Auto',
+            rows: "{path:'/items', parameters: {arrayNames:['sub']}}",
+            selectionMode: 'None',
+            enableSelectAll: false,
+            ariaLabelledBy: "title"
+         });
+
+         let column1 = new tableColumn({
+            label: 'Source',
+            width: '15rem',
+            autoResizable: true,
+            visible: true,
+            template: new HorizontalLayout({
+               content: [ new mText({ text:'{name}', wrapping: false }) ]
+            })
+         });
+
+         let column2 = new tableColumn({
+            label: 'Information',
+            autoResizable: true,
+            visible: true,
+            template: new HorizontalLayout({
+               content: [ new mText({ text:'{info}', wrapping: false }) ]
+            })
+         });
+
+         table.addColumn(column1);
+
+         table.addColumn(column2);
+
+         item.addContent(new ToolHeader({
+            height: "40px",
+            content: [
+               new ToolbarSpacer({
+                  layoutData: new OverflowToolbarLayoutData({
+                     priority:"NeverOverflow",
+                     minWidth: "16px"
+                  })
+               }),
+               new Button({
+                  text: "Expand all",
+                  tooltip: "Get cling variables info again",
+                  type: "Transparent",
+                  press: () => table.expandToLevel(1)
+               }),
+               new Button({
+                  text: "Callapse all",
+                  tooltip: "Collapse all",
+                  type: "Transparent",
+                  press: () => table.collapseAll()
+               }),
+               new Button({
+                  text: "Refresh",
+                  tooltip: "Get cling variables info again",
+                  type: "Transparent",
+                  press: () => this.onRefreshInfo(item)
+               })
+            ]
+         }));
+
+         let cont = new ScrollContainer({
+            height: 'calc(100% - 48px)'
+         });
+
+         cont.addContent(table);
+
+         item.addContent(cont);
+
+         item.setModel(new JSONModel({
+            title,
+            info: '---',
+            items: {}
+         }));
+
+         oTabContainer.addItem(item);
+
+         return item;
+      },
+
+      /** @brief Handle the "Refresh" button press event */
+      onRefreshInfo(tab) {
+         this.websocket.send("GETINFO:" + tab.getKey());
+      },
+
+      updateInfo(tab, content) {
+
+         let arr = content.split('\n');
+
+         let items = { sub: [] }, cache = {};
+
+         arr.forEach(line => {
+            let name = '', p = line.indexOf(' ');
+            if (p == 0)
+               name = '<default>';
+            else
+               name = line.slice(0, p).trim();
+
+            if (!name) return;
+            if (name == '<command')
+               name = '<command line>';
+
+            p = line.indexOf('(address: NA)');
+
+            if (p < 0) return;
+
+            if (name.indexOf('ROOT_cli') == 0)
+               name = 'ROOT_cli';
+
+            let info = line.slice(p + 14),
+                item = cache[name];
+
+            if (!item) {
+               item = cache[name] = { name, sub: [] };
+               items.sub.push(item);
+            }
+            item.sub.push({ name: "", info });
+         });
+
+         items.sub.sort((a,b) => a.name > b.name);
+
+         // single elements not create hierarchy
+         items.sub.forEach(item => {
+            if (item.sub.length == 1) {
+               item.info = item.sub[0].info;
+               delete item.sub;
+            }
+         });
+
+         tab.getModel().setProperty("/items", items);
+      },
+
 
       /* =========================================== */
       /* =============== Code Editor =============== */
@@ -661,6 +822,8 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
 
          if (txt.indexOf('editor') >= 0)
             msg = "NEWWIDGET:editor";
+         if (txt.indexOf('info') >= 0)
+            msg = "NEWWIDGET:info";
          else if (txt.indexOf('Image') >= 0)
             msg = "NEWWIDGET:image";
          else if (txt.indexOf('Geometry') >= 0)
@@ -954,8 +1117,8 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
             break;
          }
          case "IMAGE": { // update image viewer
-            let arr = JSON.parse(msg);
-            let tab = this.findTab(arr[0]);
+            let arr = JSON.parse(msg),
+                tab = this.findTab(arr[0]);
 
             if (tab) {
                tab.setAdditionalText(arr[1]);
@@ -963,6 +1126,13 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
                let oViewer = tab.getContent()[0].getContent()[0];
                oViewer.setSrc(arr[3]);
             }
+            break;
+         }
+         case "INFO": {
+            let arr = JSON.parse(msg),
+                tab = this.findTab(arr[0]);
+            if (tab)
+               this.updateInfo(tab, arr[2]);
             break;
          }
          case "NEWWIDGET": {  // widget created by server, need to establish connection
@@ -1121,6 +1291,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
          switch(kind) {
             case "editor": tabItem = this.createCodeEditor(par1, par2, par3, tooltip); break;
             case "image": tabItem = this.createImageViewer(par1, par2, par3, tooltip); break;
+            case "info": tabItem = this.createInfoViewer(par1, par2, par3, tooltip); break;
             case "tree": tabItem = this.createTreeViewer(par1, par2, par3, tooltip); break;
             case "geom": tabItem = this.createGeomViewer(par1, par2, par3, tooltip); break;
             case "catched": tabItem = this.createCatchedWidget(par1, par2, par3, tooltip); break;

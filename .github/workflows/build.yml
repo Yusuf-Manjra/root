@@ -38,14 +38,14 @@ jobs:
           echo "$HOME/.sonar/build-wrapper-linux-x86" >> $GITHUB_PATH
       - name: Setup & Check Location Of Dependancies
         run: |
-          sudo apt-get update
+          sudo apt update
           sudo apt install libxpm-dev
           dpkg -L libxpm-dev
       - name: Run build-wrapper
         run: |
           mkdir root_build
           cmake -S . -B ./root_build
-          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} cmake --build ./root_build --clean-first
+          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} cmake --build ./root_build --clean-first -j2
       - name: Run sonar-scanner
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

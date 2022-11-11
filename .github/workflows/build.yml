@@ -43,8 +43,9 @@ jobs:
           dpkg -L libxpm-dev
       - name: Run build-wrapper
         run: |
+          cd ../
           mkdir root_build
-          cmake -S . -B ./root_build
+          cmake -S ./traccc -B ./root_build
           build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} cmake --build ./root_build --clean-first -j2
       - name: Run sonar-scanner
         env:

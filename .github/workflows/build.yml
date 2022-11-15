@@ -39,6 +39,7 @@ jobs:
       - name: Setup & Check Location Of Dependancies
         run: |
           sudo apt update
+          sudo apt install ninja-build
           sudo apt install libxpm-dev
           dpkg -L libxpm-dev
       - name: Run build-wrapper
@@ -48,7 +49,7 @@ jobs:
           cd root_build
           cmake -S ../root -B .
           cd ../root
-          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} cmake --build ../root_build --clean-first -j2
+          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} cmake -G Ninja, ninja
       - name: Run sonar-scanner
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -56,5 +57,5 @@ jobs:
           SONAR_SCANNER_OPTS: "-Xmx6144m"
         run: |
           export SONAR_SCANNER_OPTS="-Xmx6144m"
-          sonar-scanner --define sonar.host.url="${{ env.SONAR_SERVER_URL }}" --define sonar.cfamily.build-wrapper-output="${{ env.BUILD_WRAPPER_OUT_DIR }}" -X
+          sonar-scanner --define sonar.host.url="${{ env.SONAR_SERVER_URL }}" --define sonar.cfamily.build-wrapper-output="${{ env.BUILD_WRAPPER_OUT_DIR }}"
       

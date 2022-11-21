@@ -1,4 +1,4 @@
-import { BIT, isBatchMode } from '../core.mjs';
+import { BIT, isBatchMode, clTLatex, clTMathText, clTPolyLine } from '../core.mjs';
 import { rgb as d3_rgb } from '../d3.mjs';
 import { BasePainter } from '../base/BasePainter.mjs';
 import { ObjectPainter } from '../base/ObjectPainter.mjs';
@@ -50,8 +50,8 @@ async function drawText() {
 
    if (text.fTextAngle) arg.rotate = -text.fTextAngle;
 
-   if (text._typename == 'TLatex') { arg.latex = 1; fact = 0.9; } else
-   if (text._typename == 'TMathText') { arg.latex = 2; fact = 0.8; }
+   if (text._typename == clTLatex) { arg.latex = 1; fact = 0.9; } else
+   if (text._typename == clTMathText) { arg.latex = 2; fact = 0.8; }
 
    this.startTextDrawing(text.fTextFont, Math.round((textsize > 1) ? textsize : textsize*Math.min(w,h)*fact));
 
@@ -87,7 +87,6 @@ async function drawText() {
 /** @summary Draw TLine
   * @private */
 async function drawTLine(dom, obj) {
-
    let painter = new ObjectPainter(dom, obj);
 
    painter.redraw = function() {
@@ -96,12 +95,11 @@ async function drawTLine(dom, obj) {
             lineatt = new TAttLineHandler(line),
             isndc = line.TestBit(kLineNDC);
 
-      // create svg:g container for line drawing
       this.createG();
 
       this.draw_g
           .append('svg:path')
-          .attr('d', `M${this.axisToSvg('x', line.fX1, isndc)},${this.axisToSvg('y', line.fY1, isndc)}L${this.axisToSvg('x', line.fX2, isndc)},${this.axisToSvg('y', line.fY2, isndc)}`)
+          .attr('d', `M${this.axisToSvg('x',line.fX1,isndc)},${this.axisToSvg('y',line.fY1,isndc)}L${this.axisToSvg('x',line.fX2,isndc)},${this.axisToSvg('y',line.fY2,isndc)}`)
           .call(lineatt.func);
 
       return this;
@@ -114,7 +112,6 @@ async function drawTLine(dom, obj) {
   * @private */
 function drawPolyLine() {
 
-   // create svg:g container for polyline drawing
    this.createG();
 
    let polyline = this.getObject(),
@@ -127,7 +124,8 @@ function drawPolyLine() {
    for (let n = 0; n <= polyline.fLastPoint; ++n)
       cmd += `${n>0?'L':'M'}${func.x(polyline.fX[n])},${func.y(polyline.fY[n])}`;
 
-   if (polyline._typename != 'TPolyLine') fillatt.setSolidColor('none');
+   if (polyline._typename != clTPolyLine)
+      fillatt.setSolidColor('none');
 
    if (!fillatt.empty()) cmd += 'Z';
 
@@ -147,7 +145,6 @@ function drawEllipse() {
    this.createAttLine({ attr: ellipse });
    this.createAttFill({ attr: ellipse });
 
-   // create svg:g container for ellipse drawing
    this.createG();
 
    let funcs = this.getAxisToSvgFunc(),
@@ -230,7 +227,6 @@ function drawEllipse() {
 function drawPie() {
    let pie = this.getObject();
 
-   // create svg:g container for ellipse drawing
    this.createG();
 
    let xc = this.axisToSvg('x', pie.fX),
@@ -238,12 +234,13 @@ function drawPie() {
        rx = this.axisToSvg('x', pie.fX + pie.fRadius) - xc,
        ry = this.axisToSvg('y', pie.fY + pie.fRadius) - yc;
 
-   this.draw_g.attr('transform',`translate(${xc},${yc})`);
+   this.draw_g.attr('transform', `translate(${xc},${yc})`);
 
    // Draw the slices
    let nb = pie.fPieSlices.length, total = 0,
        af = (pie.fAngularOffset*Math.PI)/180,
-       x1 = Math.round(rx*Math.cos(af)), y1 = Math.round(ry*Math.sin(af));
+       x1 = Math.round(rx*Math.cos(af)),
+       y1 = Math.round(ry*Math.sin(af));
 
    for (let n = 0; n < nb; n++)
       total += pie.fPieSlices[n].fValue;
@@ -268,14 +265,12 @@ function drawPie() {
 /** @summary Draw TBox
   * @private */
 function drawBox() {
-
    let box = this.getObject(),
        opt = this.getDrawOpt(),
        draw_line = (opt.toUpperCase().indexOf('L') >= 0),
        lineatt = this.createAttLine(box),
        fillatt = this.createAttFill(box);
 
-   // create svg:g container for box drawing
    this.createG();
 
    let x1 = this.axisToSvg('x', box.fX1),
@@ -316,17 +311,16 @@ function drawBox() {
 /** @summary Draw TMarker
   * @private */
 function drawMarker() {
-   let marker = this.getObject(),
-       att = new TAttMarkerHandler(marker),
-       kMarkerNDC = BIT(14),
-       isndc = marker.TestBit(kMarkerNDC);
+   const marker = this.getObject(),
+         att = new TAttMarkerHandler(marker),
+         kMarkerNDC = BIT(14),
+         isndc = marker.TestBit(kMarkerNDC);
 
-   // create svg:g container for box drawing
    this.createG();
 
    let x = this.axisToSvg('x', marker.fX, isndc),
        y = this.axisToSvg('y', marker.fY, isndc),
-       path = att.create(x,y);
+       path = att.create(x, y);
 
    if (path)
       this.draw_g.append('svg:path')
@@ -337,8 +331,6 @@ function drawMarker() {
 /** @summary Draw TPolyMarker
   * @private */
 function drawPolyMarker() {
-
-   // create svg:g container for box drawing
    this.createG();
 
    let poly = this.getObject(),

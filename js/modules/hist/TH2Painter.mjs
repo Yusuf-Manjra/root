@@ -1,4 +1,4 @@
-import { settings, gStyle } from '../core.mjs';
+import { settings, gStyle, clTMultiGraph } from '../core.mjs';
 import { Vector2, BufferGeometry, BufferAttribute, Mesh, MeshBasicMaterial, ShapeUtils } from '../three.mjs';
 import { assignFrame3DMethods, drawBinsLego, drawBinsError3D, drawBinsContour3D, drawBinsSurf3D } from './hist3d.mjs';
 import { TAxisPainter } from '../gpad/TAxisPainter.mjs';
@@ -39,7 +39,7 @@ function drawTH2PolyLego(painter) {
       let all_pnts = [], all_faces = [],
           ngraphs = 1, gr = bin.fPoly, nfaces = 0;
 
-      if (gr._typename == 'TMultiGraph') {
+      if (gr._typename == clTMultiGraph) {
          ngraphs = bin.fPoly.fGraphs.arr.length;
          gr = null;
       }
@@ -235,7 +235,7 @@ class TH2Painter extends TH2Painter2D {
          if (is_main) {
             assignFrame3DMethods(main);
             pr = main.create3DScene(this.options.Render3D, this.options.x3dscale, this.options.y3dscale).then(() => {
-               main.setAxesRanges(histo.fXaxis, this.xmin, this.xmax, histo.fYaxis, this.ymin, this.ymax, histo.fZaxis, this.zmin, this.zmax);
+               main.setAxesRanges(histo.fXaxis, this.xmin, this.xmax, histo.fYaxis, this.ymin, this.ymax, histo.fZaxis, this.zmin, this.zmax, this);
                main.set3DOptions(this.options);
                main.drawXYZ(main.toplevel, TAxisPainter, { zmult, zoom: settings.Zooming, ndim: 2, draw: this.options.Axis !== -1 });
             });

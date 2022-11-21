@@ -1,4 +1,5 @@
-import { gStyle, BIT, settings, create, createHistogram, isBatchMode } from '../core.mjs';
+import { gStyle, BIT, settings, create, createHistogram, isBatchMode, isFunc, isStr,
+         clTPaveStats, clTCutG, clTF1, clTF2 } from '../core.mjs';
 import { select as d3_select } from '../d3.mjs';
 import { DrawOptions, buildSvgPath } from '../base/BasePainter.mjs';
 import { ObjectPainter } from '../base/ObjectPainter.mjs';
@@ -8,7 +9,11 @@ import { TAttFillHandler } from '../base/TAttFillHandler.mjs';
 import { addMoveHandler } from '../gui/utils.mjs';
 
 
-const kNotEditable = BIT(18);   // bit set if graph is non editable
+const kNotEditable = BIT(18),   // bit set if graph is non editable
+      clTGraphErrors = 'TGraphErrors',
+      clTGraphAsymmErrors = 'TGraphAsymmErrors',
+      clTGraphBentErrors = 'TGraphBentErrors',
+      clTGraphMultiErrors = 'TGraphMultiErrors';
 
 /**
  * @summary Painter for TGraph object.
@@ -24,10 +29,10 @@ class TGraphPainter extends ObjectPainter {
       this.bins = null;
       this.xmin = this.ymin = this.xmax = this.ymax = 0;
       this.wheel_zoomy = true;
-      this.is_bent = (graph._typename == 'TGraphBentErrors');
-      this.has_errors = (graph._typename == 'TGraphErrors') ||
-                        (graph._typename == 'TGraphMultiErrors') ||
-                        (graph._typename == 'TGraphAsymmErrors') ||
+      this.is_bent = (graph._typename == clTGraphBentErrors);
+      this.has_errors = (graph._typename == clTGraphErrors) ||
+                        (graph._typename == clTGraphMultiErrors) ||
+                        (graph._typename == clTGraphAsymmErrors) ||
                          this.is_bent || graph._typename.match(/^RooHist/);
    }
 
@@ -57,13 +62,13 @@ class TGraphPainter extends ObjectPainter {
    /** @summary Returns object if this drawing TGraphMultiErrors object */
    get_gme() {
       let graph = this.getObject();
-      return graph?._typename == 'TGraphMultiErrors' ? graph : null;
+      return graph?._typename == clTGraphMultiErrors ? graph : null;
    }
 
    /** @summary Decode options */
    decodeOptions(opt, first_time) {
 
-      if ((typeof opt == 'string') && (opt.indexOf('same ') == 0))
+      if (isStr(opt) && (opt.indexOf('same ') == 0))
          opt = opt.slice(5);
 
       let graph = this.getObject(),
@@ -168,7 +173,7 @@ class TGraphPainter extends ObjectPainter {
          if (d.empty()) res.Line = 1;
       }
 
-      if (graph._typename == 'TGraphErrors') {
+      if (graph._typename == clTGraphErrors) {
          let len = graph.fEX.length, m = 0;
          for (let k = 0; k < len; ++k)
             m = Math.max(m, graph.fEX[k], graph.fEY[k]);
@@ -214,12 +219,14 @@ class TGraphPainter extends ObjectPainter {
       if (!gr) return;
 
       let kind = 0, npoints = gr.fNpoints;
-      if ((gr._typename === 'TCutG') && (npoints > 3)) npoints--;
+      if ((gr._typename === clTCutG) && (npoints > 3)) npoints--;
 
-      if (gr._typename == 'TGraphErrors') kind = 1; else
-      if (gr._typename == 'TGraphMultiErrors') kind = 2; else
-      if (gr._typename == 'TGraphAsymmErrors' || gr._typename == 'TGraphBentErrors'
-          || gr._typename.match(/^RooHist/)) kind = 3;
+      if (gr._typename == clTGraphErrors)
+         kind = 1;
+      else if (gr._typename == clTGraphMultiErrors)
+         kind = 2;
+      else if (gr._typename == clTGraphAsymmErrors || gr._typename == clTGraphBentErrors || gr._typename.match(/^RooHist/))
+         kind = 3;
 
       this.bins = new Array(npoints);
 
@@ -343,7 +350,7 @@ class TGraphPainter extends ObjectPainter {
       if ((this.bins.length < 30) && !filter_func) return this.bins;
 
       let selbins = null;
-      if (typeof filter_func == 'function') {
+      if (isFunc(filter_func)) {
          for (let n = 0; n < this.bins.length; ++n) {
             if (filter_func(this.bins[n],n)) {
                if (!selbins) selbins = (n == 0) ? [] : this.bins.slice(0, n);
@@ -368,8 +375,8 @@ class TGraphPainter extends ObjectPainter {
 
    /** @summary Returns tooltip for specified bin */
    getTooltips(d) {
-      let pmain = this.getFramePainter(), lines = [],
-          funcs = pmain?.getGrFuncs(this.options.second_x, this.options.second_y),
+      let pmain = this.get_main(), lines = [],
+          funcs = pmain.getGrFuncs(this.options.second_x, this.options.second_y),
           gme = this.get_gme();
 
       lines.push(this.getObjectHint());
@@ -416,14 +423,21 @@ class TGraphPainter extends ObjectPainter {
                 value = (value > 0) ? Math.log10(value) : this.pad.fUxmin;
              else
                 value = (value - this.pad.fX1) / (this.pad.fX2 - this.pad.fX1);
-             return value*this.pw;
+             return value * this.pw;
           },
           gry(value) {
              if (this.pad.fLogy)
                 value = (value > 0) ? Math.log10(value) : this.pad.fUymin;
              else
                 value = (value - this.pad.fY1) / (this.pad.fY2 - this.pad.fY1);
-             return (1-value)*this.ph;
+             return (1 - value) * this.ph;
+          },
+          revertAxis(name, v) {
+            if (name == 'x')
+               return v / this.pw * (this.pad.fX2 - this.pad.fX1) + this.pad.fX1;
+            if (name == 'y')
+               return (1 - v / this.ph) * (this.pad.fY2 - this.pad.fY1) + this.pad.fY1;
+            return v;
           },
           getGrFuncs() { return this; }
       }
@@ -494,7 +508,7 @@ class TGraphPainter extends ObjectPainter {
       if (options.Line || options.Fill) {
 
          let close_symbol = '';
-         if (graph._typename == 'TCutG') options.Fill = 1;
+         if (graph._typename == clTCutG) options.Fill = 1;
 
          if (options.Fill) {
             close_symbol = 'Z'; // always close area if we want to fill it
@@ -750,7 +764,7 @@ class TGraphPainter extends ObjectPainter {
             }
          }
 
-         if (path.length > 0) {
+         if (path) {
             draw_g.append('svg:path')
                   .attr('d', path)
                   .call(this.markeratt.func);
@@ -828,7 +842,7 @@ class TGraphPainter extends ObjectPainter {
 
       if (this.options._pfc || this.options._plc || this.options._pmc) {
          let mp = this.getMainPainter();
-         if (typeof mp?.createAutoColor == 'function') {
+         if (isFunc(mp?.createAutoColor)) {
             let icolor = mp.createAutoColor();
             if (this.options._pfc) { graph.fFillColor = icolor; delete this.fillatt; }
             if (this.options._plc) { graph.fLineColor = icolor; delete this.lineatt; }
@@ -879,7 +893,7 @@ class TGraphPainter extends ObjectPainter {
 
       if (this.draw_kind != 'nodes') return null;
 
-      let pmain = this.getFramePainter(),
+      let pmain = this.get_main(),
           height = pmain.getFrameHeight(),
           esz = this.error_size,
           isbar1 = (this.options.Bar === 1),
@@ -991,8 +1005,7 @@ class TGraphPainter extends ObjectPainter {
           bestindx = -1,
           bestbin = null,
           bestdist = 1e10,
-          pmain = this.getFramePainter(),
-          funcs = pmain.getGrFuncs(this.options.second_x, this.options.second_y),
+          funcs = this.get_main().getGrFuncs(this.options.second_x, this.options.second_y),
           dist, grx, gry, n, bin;
 
       for (n = 0; n < this.bins.length; ++n) {
@@ -1092,7 +1105,7 @@ class TGraphPainter extends ObjectPainter {
 
       let islines = (this.draw_kind == 'lines'),
           ismark = (this.draw_kind == 'mark'),
-          pmain = this.getFramePainter(),
+          pmain = this.get_main(),
           funcs = pmain.getGrFuncs(this.options.second_x, this.options.second_y),
           gr = this.getObject(),
           res = { name: gr.fName, title: gr.fTitle,
@@ -1203,14 +1216,13 @@ class TGraphPainter extends ObjectPainter {
    /** @summary Start moving of TGraph */
    moveStart(x,y) {
       this.pos_dx = this.pos_dy = 0;
+      this.move_funcs = this.get_main().getGrFuncs(this.options.second_x, this.options.second_y);
       let hint = this.extractTooltip({x, y});
       if (hint && hint.exact && (hint.binindx !== undefined)) {
          this.move_binindx = hint.binindx;
          this.move_bin = hint.bin;
-         let pmain = this.getFramePainter(),
-             funcs = pmain?.getGrFuncs(this.options.second_x, this.options.second_y);
-         this.move_x0 = funcs ? funcs.grx(this.move_bin.x) : x;
-         this.move_y0 = funcs ? funcs.gry(this.move_bin.y) : y;
+         this.move_x0 = this.move_funcs.grx(this.move_bin.x);
+         this.move_y0 = this.move_funcs.gry(this.move_bin.y);
       } else {
          delete this.move_binindx;
       }
@@ -1223,14 +1235,10 @@ class TGraphPainter extends ObjectPainter {
 
       if (this.move_binindx === undefined) {
          this.draw_g.attr('transform', `translate(${this.pos_dx},${this.pos_dy})`);
-      } else {
-         let pmain = this.getFramePainter(),
-             funcs = pmain?.getGrFuncs(this.options.second_x, this.options.second_y);
-         if (funcs && this.move_bin) {
-            this.move_bin.x = funcs.revertAxis('x', this.move_x0 + this.pos_dx);
-            this.move_bin.y = funcs.revertAxis('y', this.move_y0 + this.pos_dy);
-            this.drawGraph();
-         }
+      } else if (this.move_funcs && this.move_bin) {
+         this.move_bin.x = this.move_funcs.revertAxis('x', this.move_x0 + this.pos_dx);
+         this.move_bin.y = this.move_funcs.revertAxis('y', this.move_y0 + this.pos_dy);
+         this.drawGraph();
       }
    }
 
@@ -1241,25 +1249,25 @@ class TGraphPainter extends ObjectPainter {
       if (this.move_binindx === undefined) {
          this.draw_g.attr('transform', null);
 
-         let pmain = this.getFramePainter(),
-             funcs = pmain?.getGrFuncs(this.options.second_x, this.options.second_y);
-         if (funcs && this.bins && !not_changed) {
+         if (this.move_funcs && this.bins && !not_changed) {
             for (let k = 0; k < this.bins.length; ++k) {
                let bin = this.bins[k];
-               bin.x = funcs.revertAxis('x', funcs.grx(bin.x) + this.pos_dx);
-               bin.y = funcs.revertAxis('y', funcs.gry(bin.y) + this.pos_dy);
+               bin.x = this.move_funcs.revertAxis('x', this.move_funcs.grx(bin.x) + this.pos_dx);
+               bin.y = this.move_funcs.revertAxis('y', this.move_funcs.gry(bin.y) + this.pos_dy);
                exec += `SetPoint(${bin.indx},${bin.x},${bin.y});;`;
-               if ((bin.indx == 0) && this.matchObjectType('TCutG'))
+               if ((bin.indx == 0) && this.matchObjectType(clTCutG))
                   exec += `SetPoint(${this.getObject().fNpoints-1},${bin.x},${bin.y});;`;
             }
             this.drawGraph();
          }
       } else {
          exec = `SetPoint(${this.move_bin.indx},${this.move_bin.x},${this.move_bin.y});;`;
-         if ((this.move_bin.indx == 0) && this.matchObjectType('TCutG'))
+         if ((this.move_bin.indx == 0) && this.matchObjectType(clTCutG))
             exec += `SetPoint(${this.getObject().fNpoints-1},${this.move_bin.x},${this.move_bin.y});;`;
          delete this.move_binindx;
       }
+
+      delete this.move_funcs;
 
       if (exec && !not_changed)
          this.submitCanvExec(exec);
@@ -1280,20 +1288,21 @@ class TGraphPainter extends ObjectPainter {
    executeMenuCommand(method, args) {
       if (super.executeMenuCommand(method,args)) return true;
 
-      let canp = this.getCanvPainter(), pmain = this.getFramePainter();
+      let canp = this.getCanvPainter(), pmain = this.get_main();
 
       if ((method.fName == 'RemovePoint') || (method.fName == 'InsertPoint')) {
-         let pnt = pmain?.getLastEventPos();
-
-         if (!canp || canp._readonly || !pnt) return true; // ignore function
+         if (!canp || canp._readonly) return true; // ignore function
 
          let hint = this.extractTooltip(pnt);
 
          if (method.fName == 'InsertPoint') {
-            let funcs = pmain?.getGrFuncs(this.options.second_x, this.options.second_y),
-                userx = funcs?.revertAxis('x', pnt.x) ?? 0,
-                usery = funcs?.revertAxis('y', pnt.y) ?? 0;
-            this.submitCanvExec(`AddPoint(${userx.toFixed(3)}, ${usery.toFixed(3)})`, this.args_menu_id);
+            let pnt = isFunc(pmain.getLastEventPos) ? pmain.getLastEventPos() : null;
+            if (pnt) {
+               let funcs = pmain.getGrFuncs(this.options.second_x, this.options.second_y),
+                   userx = funcs.revertAxis('x', pnt.x) ?? 0,
+                   usery = funcs.revertAxis('y', pnt.y) ?? 0;
+               this.submitCanvExec(`AddPoint(${userx.toFixed(3)}, ${usery.toFixed(3)})`, this.args_menu_id);
+            }
          } else if (this.args_menu_id && (hint?.binindx !== undefined)) {
             this.submitCanvExec(`RemovePoint(${hint.binindx})`, this.args_menu_id);
          }
@@ -1369,10 +1378,7 @@ class TGraphPainter extends ObjectPainter {
    findFunc() {
       let gr = this.getObject();
       if (gr?.fFunctions?.arr)
-         for (let i = 0; i < gr.fFunctions.arr.length; ++i) {
-            let func = gr.fFunctions.arr[i];
-            if ((func._typename == 'TF1') || (func._typename == 'TF2')) return func;
-         }
+         return gr?.fFunctions?.arr.find(func => (func._typename == clTF1) || (func._typename == clTF2));
       return null;
    }
 
@@ -1382,7 +1388,7 @@ class TGraphPainter extends ObjectPainter {
       if (gr?.fFunctions?.arr)
          for (let i = 0; i < gr.fFunctions.arr.length; ++i) {
             let func = gr.fFunctions.arr[i];
-            if ((func._typename == 'TPaveStats') && (func.fName == 'stats')) return func;
+            if ((func._typename == clTPaveStats) && (func.fName == 'stats')) return func;
          }
       return null;
    }
@@ -1402,7 +1408,7 @@ class TGraphPainter extends ObjectPainter {
 
       const st = gStyle;
 
-      stats = create('TPaveStats');
+      stats = create(clTPaveStats);
       Object.assign(stats, { fName : 'stats', fOptStat: 0, fOptFit: st.fOptFit || 111, fBorderSize: 1 });
 
       stats.fX1NDC = st.fStatX - st.fStatW;
@@ -1501,4 +1507,4 @@ class TGraphPainter extends ObjectPainter {
 
 } // class TGraphPainter
 
-export { TGraphPainter };
+export { clTGraphAsymmErrors, TGraphPainter };

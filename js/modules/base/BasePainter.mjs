@@ -1,5 +1,5 @@
 import { select as d3_select } from '../d3.mjs';
-import { settings, internals, isNodeJs } from '../core.mjs';
+import { settings, internals, isNodeJs, isFunc, isStr } from '../core.mjs';
 
 
 /** @summary Returns visible rect of element
@@ -16,7 +16,7 @@ function getElementRect(elem, sizearg) {
 
    const styleValue = name => {
       let value = elem.style(name);
-      if (!value || (typeof value !== 'string')) return 0;
+      if (!value || !isStr(value)) return 0;
       value = parseFloat(value.replace('px', ''));
       return !Number.isFinite(value) ? 0 : Math.round(value);
    };
@@ -47,7 +47,7 @@ function getElementRect(elem, sizearg) {
 /** @summary Calculate absolute position of provided element in canvas
   * @private */
 function getAbsPosInCanvas(sel, pos) {
-   while (!sel.empty() && !sel.classed('root_canvas') && pos) {
+   while (pos && !sel.empty() && !sel.classed('root_canvas')) {
       let cl = sel.attr('class');
       if (cl && ((cl.indexOf('root_frame') >= 0) || (cl.indexOf('__root_pad_') >= 0))) {
          pos.x += sel.property('draw_x') || 0;
@@ -138,7 +138,7 @@ function floatToString(value, fmt, ret_fmt) {
 class DrawOptions {
 
    constructor(opt) {
-      this.opt = opt && (typeof opt == 'string') ? opt.toUpperCase().trim() : '';
+      this.opt = isStr(opt) ? opt.toUpperCase().trim() : '';
       this.part = '';
    }
 
@@ -427,7 +427,7 @@ class BasePainter {
 
       let res = this._selected_main;
       if (!res) {
-         if (typeof this.divid == 'string') {
+         if (isStr(this.divid)) {
             let id = this.divid;
             if (id[0] != '#') id = '#' + id;
             res = d3_select(id);
@@ -492,7 +492,7 @@ class BasePainter {
       this.divid = null;
       delete this._selected_main;
 
-      if (typeof this._hpainter?.removePainter === 'function')
+      if (isFunc(this._hpainter?.removePainter))
          this._hpainter.removePainter(this);
 
       delete this._hitemname;
@@ -632,12 +632,13 @@ class BasePainter {
      * @desc Used by {@link HierarchyPainter}
      * @private */
    setItemName(name, opt, hpainter) {
-      if (typeof name === 'string')
+      if (isStr(name))
          this._hitemname = name;
       else
          delete this._hitemname;
       // only upate draw option, never delete.
-      if (typeof opt === 'string') this._hdrawopt = opt;
+      if (isStr(opt))
+         this._hdrawopt = opt;
 
       this._hpainter = hpainter;
    }

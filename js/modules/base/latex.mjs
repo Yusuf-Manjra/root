@@ -1,4 +1,4 @@
-import { loadScript, settings, isNodeJs, source_dir } from '../core.mjs';
+import { loadScript, settings, isNodeJs, isStr, source_dir } from '../core.mjs';
 import { getElementRect, _loadJSDOM } from './BasePainter.mjs';
 import { FontHandler } from './FontHandler.mjs';
 
@@ -363,19 +363,34 @@ function parseLatex(node, arg, label, curr) {
    };
 
    const extractSubLabel = (check_first, lbrace, rbrace) => {
-      let pos = 0, n = 1, err = false;
+      let pos = 0, n = 1, err = false, extra_braces = false;
       if (!lbrace) lbrace = '{';
       if (!rbrace) rbrace = '}';
 
       const match = br => (pos + br.length <= label.length) && (label.slice(pos, pos+br.length) == br);
 
       if (check_first) {
-         if(!match(lbrace)) err = true; else label = label.slice(lbrace.length);
+         if(!match(lbrace))
+            err = true;
+         else
+            label = label.slice(lbrace.length);
       }
 
       while (!err && (n != 0) && (pos < label.length)) {
-         if (match(lbrace)) { n++; pos += lbrace.length; } else
-         if (match(rbrace)) { n--; pos += rbrace.length; } else pos++;
+         if (match(lbrace)) {
+            n++;
+            pos += lbrace.length;
+         } else if (match(rbrace)) {
+            n--;
+            pos += rbrace.length;
+            if ((n == 0) && (typeof check_first == 'string') && match(check_first+lbrace)) {
+               // handle special case like a^{b}^{2} should mean a^{b^{2}}
+               n++;
+               pos += lbrace.length + check_first.length;
+               check_first = true;
+               extra_braces = true;
+            }
+         } else pos++;
       }
       if ((n != 0) || err) {
          console.log(`mismatch with open ${lbrace} and closing ${rbrace} in ${label}`);
@@ -383,6 +398,8 @@ function parseLatex(node, arg, label, curr) {
       }
 
       let sublabel = label.slice(0, pos - rbrace.length);
+
+      if (extra_braces) sublabel = lbrace + sublabel + rbrace;
 
       label = label.slice(pos);
 
@@ -416,7 +433,7 @@ function parseLatex(node, arg, label, curr) {
          nelements++;
 
          let s = translateLaTeX(label.slice(0, best));
-         if ((s.length > 0) || alone) {
+         if (s || alone) {
             // if single text element created, place it directly in the node
             let g = curr.g || (alone ? node : currG()),
                 elem = g.append('svg:text');
@@ -557,19 +574,20 @@ function parseLatex(node, arg, label, curr) {
             res[name] = extractSubLabel();
             if (res[name] === -1) return false;
          }
-         while (label.length > 0) {
-            if (label.charAt(0) == '_') {
+
+         while (label) {
+            if (label[0] == '_') {
                label = label.slice(1);
-               res.low = !res.low ? extractSubLabel(true) : -1;
+               res.low = !res.low ? extractSubLabel('_') : -1;
                if (res.low === -1) {
                   console.log(`error with ${found.name} low limit`);
                   return false;
                }
-            } else if (label.charAt(0) == '^') {
+            } else if (label[0] == '^') {
                label = label.slice(1);
-               res.up = !res.up ? extractSubLabel(true) : -1;
+               res.up = !res.up ? extractSubLabel('^') : -1;
                if (res.up === -1) {
-                  console.log(`error with ${found.name} upper limit`);
+                  console.log(`error with ${found.name} upper limit ` + label);
                   return false;
                }
             } else break;
@@ -1201,7 +1219,7 @@ function translateMath(str, kind, color, painter) {
          str = str.replace(new RegExp(`\\\\\\b${x}\\b`, 'g'), `\\${mathjax_remap[x]}`);
    }
 
-   if (typeof color != 'string') return str;
+   if (!isStr(color)) return str;
 
    // MathJax SVG converter use colors in normal form
    //if (color.indexOf('rgb(') >= 0)
@@ -1215,7 +1233,7 @@ function translateMath(str, kind, color, painter) {
   * @private */
 function repairMathJaxSvgSize(painter, mj_node, svg, arg) {
    let transform = value => {
-      if (!value || (typeof value !== 'string') || (value.length < 3)) return null;
+      if (!value || !isStr(value) || (value.length < 3)) return null;
       let p = value.indexOf('ex');
       if ((p < 0) || (p !== value.length - 2)) return null;
       value = parseFloat(value.slice(0, p));

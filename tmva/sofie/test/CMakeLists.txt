@@ -39,7 +39,9 @@ add_dependencies(SofieCompileModels_ONNX emitFromONNX)
 
 # Finding .onnx files to be compiled and creating the appropriate command
 file(GLOB ONNX_FILES "${ONNX_MODELS_DIR}/*.onnx")
-foreach(onnx_file ${ONNX_FILES})
+# Finding .onnx files to be compiled only from ONNX
+file(GLOB ONNX_ONLY_FILES "${ONNX_MODELS_DIR}/onnx/*.onnx")
+foreach(onnx_file ${ONNX_FILES} ${ONNX_ONLY_FILES})
 	get_filename_component(fname ${onnx_file} NAME_WE)
 	get_filename_component(fdir ${onnx_file} DIRECTORY)
 	add_custom_command(TARGET SofieCompileModels_ONNX POST_BUILD
@@ -49,6 +51,7 @@ foreach(onnx_file ${ONNX_FILES})
 endforeach()
 
 # Creating a Google Test
+if (tmva-cpu)  # we need BLAS for compiling the models
 ROOT_ADD_GTEST(TestCustomModelsFromONNX TestCustomModelsFromONNX.cxx
   LIBRARIES
     ROOTTMVASofie
@@ -59,7 +62,7 @@ ROOT_ADD_GTEST(TestCustomModelsFromONNX TestCustomModelsFromONNX.cxx
 )
 
 add_dependencies(TestCustomModelsFromONNX SofieCompileModels_ONNX)
-
+endif()
 
 #For testing serialisation of RModel object
 add_executable(emitFromROOT
@@ -98,6 +101,7 @@ foreach(onnx_file ${ONNX_FILES})
 endforeach()
 
 # Creating a Google Test for Serialisation of RModel
+if (tmva-cpu)
 ROOT_ADD_GTEST(TestCustomModelsFromROOT TestCustomModelsFromROOT.cxx
   LIBRARIES
     ROOTTMVASofie
@@ -107,6 +111,7 @@ ROOT_ADD_GTEST(TestCustomModelsFromROOT TestCustomModelsFromROOT.cxx
     ${CMAKE_CURRENT_BINARY_DIR}
 )
 add_dependencies(TestCustomModelsFromROOT SofieCompileModels_ROOT)
+endif()
 
 # gtest
 # Look for needed python modules
@@ -119,6 +124,7 @@ if(PY_TORCH_FOUND)
   configure_file(LinearModelGenerator.py  LinearModelGenerator.py COPYONLY)
   configure_file(RecurrentModelGenerator.py  RecurrentModelGenerator.py COPYONLY)
 
+if (tmva-cpu)
   ROOT_ADD_GTEST(TestSofieModels TestSofieModels.cxx
     LIBRARIES
       ROOTTMVASofie
@@ -128,4 +134,5 @@ if(PY_TORCH_FOUND)
     INCLUDE_DIRS
       ${CMAKE_CURRENT_BINARY_DIR}
   )
+ endif()
 endif()

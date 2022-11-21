@@ -1,3 +1,4 @@
+import { isObject, isFunc } from '../core.mjs';
 import { createLineSegments, create3DLineMaterial } from '../base/base3d.mjs';
 import { drawDummy3DGeom } from '../geom/TGeoPainter.mjs';
 import { drawPolyMarker3D as drawPolyMarker3Dplain } from './TPolyMarker3D.mjs';
@@ -17,7 +18,7 @@ function before3DDraw(painter, obj) {
    let geop = painter.getMainPainter();
    if(!geop)
       return drawDummy3DGeom(painter);
-   if (typeof geop.drawExtras == 'function')
+   if (isFunc(geop.drawExtras))
       return geop.drawExtras(obj);
 
    return null;
@@ -31,7 +32,7 @@ async function drawPolyMarker3D() {
    let poly = this.getObject(),
        fp = before3DDraw(this, poly);
 
-   if (!fp || (typeof fp !== 'object') || !fp.grx || !fp.gry || !fp.grz)
+   if (!isObject(fp) || !fp.grx || !fp.gry || !fp.grz)
       return fp;
 
    this.$fp = fp;
@@ -48,7 +49,7 @@ async function drawPolyLine3D() {
    let line = this.getObject(),
        fp = before3DDraw(this, line);
 
-   if (!fp || (typeof fp !== 'object') || !fp.grx || !fp.gry || !fp.grz)
+   if (!isObject(fp) || !fp.grx || !fp.gry || !fp.grz)
       return fp;
 
    let limit = 3*line.fN, p = line.fP, pnts = [];

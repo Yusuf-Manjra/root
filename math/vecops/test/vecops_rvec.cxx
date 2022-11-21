@@ -13,6 +13,11 @@
 #include <sstream>
 #include <cmath>
 
+// Backward compatibility for gtest version < 1.10.0
+#ifndef INSTANTIATE_TEST_SUITE_P
+#define INSTANTIATE_TEST_SUITE_P INSTANTIATE_TEST_CASE_P
+#endif
+
 using namespace ROOT;
 using namespace ROOT::VecOps;
 using namespace ROOT::Detail::VecOps; // for `IsSmall` and `IsAdopting`
@@ -121,6 +126,21 @@ TEST(VecOps, MoveCtor)
    RVec<int> v1{1, 2, 3};
    RVec<int> v2(std::move(v1));
    EXPECT_EQ(v2.size(), 3u);
+}
+
+// regression test: this used to fail to compile
+TEST(VecOps, MoveOnlyValue)
+{
+   struct MoveOnly {
+      MoveOnly() = default;
+      MoveOnly(const MoveOnly &) = delete;
+      MoveOnly &operator=(const MoveOnly &) = delete;
+      MoveOnly(MoveOnly &&) = default;
+      MoveOnly &operator=(MoveOnly &&) = default;
+   };
+   ROOT::RVec<MoveOnly> v(10);
+   v.resize(20);
+   v[19] = MoveOnly();
 }
 
 TEST(VecOps, Conversion)

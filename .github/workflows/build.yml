@@ -43,16 +43,17 @@ jobs:
           sudo apt install -y libxpm-dev
       - name: Run build-wrapper
         # Standard CMake Command
+        # cmake -S ../root -B .
         # cmake --build ../root_build --clean-first --parallel 4
+
         # Ninja CMake Command
         # cmake -GNinja --clean-first --parallel 4
         run: |
           cd ../
           mkdir root_build
           cd root_build
-          cmake -S ../root -B .
-          cd ../root
-          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} cmake -GNinja
+          cmake -GNinja -S ../root -B .
+          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} ninja
       - name: Run sonar-scanner
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

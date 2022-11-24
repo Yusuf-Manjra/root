@@ -39,8 +39,10 @@ jobs:
       - name: Setup & Check Location Of Dependancies
         run: |
           sudo apt update
-          sudo apt install -y ninja-build
-          sudo apt install -y libxpm-dev
+          sudo apt install ninja-build
+          dpkg -L ninja-build
+          sudo apt install libxpm-dev
+          dpkg -L libxpm-dev
       - name: Run build-wrapper
         # Standard CMake Command
         # cmake -S ../root -B .

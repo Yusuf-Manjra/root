@@ -48,12 +48,14 @@ jobs:
 
         # Ninja CMake Command
         # cmake -GNinja --clean-first --parallel 4
+        # ninja -t clean
         run: |
           cd ../
           mkdir root_build
           cd root_build
-          cmake -GNinja -S ../root -B .
-          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} ninja
+          cmake -S ../root -B .
+          cd ../root
+          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} ninja ../root_build -t clean
       - name: Run sonar-scanner
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

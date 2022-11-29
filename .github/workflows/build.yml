@@ -37,13 +37,13 @@ jobs:
           unzip -o $HOME/.sonar/build-wrapper-linux-x86.zip -d $HOME/.sonar/
           echo "$HOME/.sonar/build-wrapper-linux-x86" >> $GITHUB_PATH
       - name: Setup & Check Location Of Dependancies
+          # sudo apt update
+          # sudo apt install ninja-build
+          # sudo apt install libxpm-dev
+          # sudo apt install libxft-dev
+          # dpkg -L ninja-build
         run: |
-          sudo apt update
-          sudo apt install ninja-build
-          dpkg -L ninja-build
-          sudo apt install libxpm-dev
           dpkg -L libxpm-dev
-          sudo apt install libxft-dev
           dpkg -L libxft-dev
       - name: Run build-wrapper
         # Standard CMake Command
@@ -57,9 +57,9 @@ jobs:
           cd ../
           mkdir root_build
           cd root_build
-          cmake -GNinja -S ../root -B .
+          cmake -S ../root -B .
           cd ../root
-          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} ninja ../root_build -t clean 
+          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} cmake --build ../root_build --clean-first --parallel 4
       - name: Run sonar-scanner
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

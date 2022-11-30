@@ -55,7 +55,7 @@ jobs:
         # ninja ../root_build -t clean 
         run: |
           cd ../
-          mkdir root_build
+          mkdir -p root_build
           cd root_build
           cmake -S ../root -B .
           cd ../root

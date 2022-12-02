@@ -57,6 +57,15 @@ TApplicationImp *TGuiFactory::CreateApplicationImp(const char *classname, int *a
 
 TCanvasImp *TGuiFactory::CreateCanvasImp(TCanvas *c, const char *title, UInt_t width, UInt_t height)
 {
+   if (gROOT->IsWebDisplay()) {
+      auto ph = gROOT->GetPluginManager()->FindHandler("TCanvasImp", "TWebCanvas");
+
+      if (ph && ph->LoadPlugin() != -1) {
+         auto imp = (TCanvasImp *) ph->ExecPlugin(6, c, title, 0, 0, width, height);
+         if (imp) return imp;
+      }
+   }
+
    return new TCanvasImp(c, title, width, height);
 }
 
@@ -65,6 +74,15 @@ TCanvasImp *TGuiFactory::CreateCanvasImp(TCanvas *c, const char *title, UInt_t w
 
 TCanvasImp *TGuiFactory::CreateCanvasImp(TCanvas *c, const char *title, Int_t x, Int_t y, UInt_t width, UInt_t height)
 {
+   if (gROOT->IsWebDisplay()) {
+       auto ph = gROOT->GetPluginManager()->FindHandler("TCanvasImp", "TWebCanvas");
+
+       if (ph && ph->LoadPlugin() != -1) {
+          auto imp = (TCanvasImp *) ph->ExecPlugin(6, c, title, x, y, width, height);
+          if (imp) return imp;
+       }
+    }
+
    return new TCanvasImp(c, title, x, y, width, height);
 }
 
@@ -73,9 +91,8 @@ TCanvasImp *TGuiFactory::CreateCanvasImp(TCanvas *c, const char *title, Int_t x,
 
 TBrowserImp *TGuiFactory::CreateBrowserImp(TBrowser *b, const char *title, UInt_t width, UInt_t height, Option_t *opt)
 {
-   TString webclass = "ROOT::Experimental::RWebBrowserImp";
-   if ((gROOT->GetWebDisplay() == "server") && (webclass == gEnv->GetValue("Browser.Name", "---"))) {
-      TPluginHandler *ph = gROOT->GetPluginManager()->FindHandler("TBrowserImp", webclass);
+   if (gROOT->IsWebDisplay()) {
+      auto ph = gROOT->GetPluginManager()->FindHandler("TBrowserImp", "ROOT::Experimental::RWebBrowserImp");
 
       if (ph && ph->LoadPlugin() != -1) {
          TBrowserImp *imp = (TBrowserImp *)ph->ExecPlugin(5, b, title, width, height, opt);
@@ -91,9 +108,8 @@ TBrowserImp *TGuiFactory::CreateBrowserImp(TBrowser *b, const char *title, UInt_
 
 TBrowserImp *TGuiFactory::CreateBrowserImp(TBrowser *b, const char *title, Int_t x, Int_t y, UInt_t width, UInt_t height, Option_t *opt)
 {
-   TString webclass = "ROOT::Experimental::RWebBrowserImp";
-   if ((gROOT->GetWebDisplay() == "server") && (webclass == gEnv->GetValue("Browser.Name", "---"))) {
-      TPluginHandler *ph = gROOT->GetPluginManager()->FindHandler("TBrowserImp", webclass);
+   if (gROOT->IsWebDisplay()) {
+      auto ph = gROOT->GetPluginManager()->FindHandler("TBrowserImp", "ROOT::Experimental::RWebBrowserImp");
 
       if (ph && ph->LoadPlugin() != -1) {
          TBrowserImp *imp = (TBrowserImp *)ph->ExecPlugin(7, b, title, x, y, width, height, opt);

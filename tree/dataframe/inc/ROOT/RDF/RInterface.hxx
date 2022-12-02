@@ -2435,7 +2435,7 @@ public:
       using Helper_t = RDFInternal::ReportHelper<Proxied>;
       using Action_t = RDFInternal::RAction<Helper_t, Proxied>;
 
-      auto action = std::make_unique<Action_t>(Helper_t(rep, fProxiedPtr, returnEmptyReport), ColumnNames_t({}),
+      auto action = std::make_unique<Action_t>(Helper_t(rep, fProxiedPtr.get(), returnEmptyReport), ColumnNames_t({}),
                                                fProxiedPtr, RDFInternal::RColumnRegister(fColRegister));
 
       return MakeResultPtr(rep, *fLoopManager, std::move(action));
@@ -2779,6 +2779,7 @@ private:
       const auto columnListWithoutSizeColumns = RDFInternal::FilterArraySizeColNames(columnList, "Snapshot");
 
       RDFInternal::CheckTypesAndPars(sizeof...(ColumnTypes), columnListWithoutSizeColumns.size());
+      // validCols has aliases resolved, while columnListWithoutSizeColumns still has aliases in it.
       const auto validCols = GetValidatedColumnNames(columnListWithoutSizeColumns.size(), columnListWithoutSizeColumns);
       RDFInternal::CheckForDuplicateSnapshotColumns(validCols);
       CheckAndFillDSColumns(validCols, TTraits::TypeList<ColumnTypes...>());
@@ -2791,8 +2792,11 @@ private:
          std::string(filename), std::string(dirname), std::string(treename), columnListWithoutSizeColumns, options});
 
       ::TDirectory::TContext ctxt;
-      auto newRDF = std::make_shared<ROOT::RDataFrame>(fullTreeName, filename, validCols);
+      auto newRDF =
+         std::make_shared<ROOT::RDataFrame>(fullTreeName, filename, /*defaultColumns=*/columnListWithoutSizeColumns);
 
+      // The Snapshot helper will use validCols (with aliases resolved) as input columns, and
+      // columnListWithoutSizeColumns (still with aliases in it, passed through snapHelperArgs) as output column names.
       auto resPtr = CreateAction<RDFInternal::ActionTags::Snapshot, ColumnTypes...>(validCols, newRDF, snapHelperArgs,
                                                                                     fProxiedPtr);
 

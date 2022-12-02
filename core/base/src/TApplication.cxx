@@ -402,8 +402,6 @@ void TApplication::GetOptions(Int_t *argc, char **argv)
          TString argw;
          if (*opt == '=')
             argw.Append(opt+1);
-         else if (gROOT->IsBatch())
-            argw = "batch";
          if (argw == "off") {
             gROOT->SetWebDisplay(argw.Data());
             gEnv->SetValue("Browser.Name", "TRootBrowser"); // force usage of TBrowser back
@@ -412,7 +410,7 @@ void TApplication::GetOptions(Int_t *argc, char **argv)
             gEnv->SetValue("Gui.Factory", "web");
             gEnv->SetValue("TreeViewer.Name", "RTreeViewer");
          } else {
-            Error("GetOptions", "--web option not supported, ROOT should be built with at least c++14 enabled");
+            Error("GetOptions", "--web option not supported, ROOT should be built with -Dwebgui=ON which requires c++17");
          }
       } else if (!strcmp(argv[i], "-e")) {
          argv[i] = null;
@@ -1167,17 +1165,16 @@ void TApplication::Help(const char *line)
 
 void TApplication::LoadGraphicsLibs()
 {
-   if (gROOT->IsBatch()) return;
+   if (gROOT->IsBatch())
+      return;
 
-   TPluginHandler *h;
-   if ((h = gROOT->GetPluginManager()->FindHandler("TVirtualPad")))
+   if (auto h = gROOT->GetPluginManager()->FindHandler("TVirtualPad"))
       if (h->LoadPlugin() == -1)
          return;
 
    TString name;
    TString title1 = "ROOT interface to ";
    TString nativex, title;
-   TString nativeg = "root";
 
 #ifdef R__WIN32
    nativex = "win32gdk";
@@ -1193,7 +1190,7 @@ void TApplication::LoadGraphicsLibs()
    title   = title1 + "X11";
 #endif
 
-   TString guiBackend(gEnv->GetValue("Gui.Backend", "native"));
+   TString guiBackend = gEnv->GetValue("Gui.Backend", "native");
    guiBackend.ToLower();
    if (guiBackend == "native") {
       guiBackend = nativex;
@@ -1201,12 +1198,8 @@ void TApplication::LoadGraphicsLibs()
       name  = guiBackend;
       title = title1 + guiBackend;
    }
-   TString guiFactory(gEnv->GetValue("Gui.Factory", "native"));
-   guiFactory.ToLower();
-   if (guiFactory == "native")
-      guiFactory = nativeg;
 
-   if ((h = gROOT->GetPluginManager()->FindHandler("TVirtualX", guiBackend))) {
+   if (auto h = gROOT->GetPluginManager()->FindHandler("TVirtualX", guiBackend)) {
       if (h->LoadPlugin() == -1) {
          gROOT->SetBatch(kTRUE);
          return;
@@ -1214,12 +1207,23 @@ void TApplication::LoadGraphicsLibs()
       gVirtualX = (TVirtualX *) h->ExecPlugin(2, name.Data(), title.Data());
       fgGraphInit = kTRUE;
    }
-   if ((h = gROOT->GetPluginManager()->FindHandler("TGuiFactory", guiFactory))) {
-      if (h->LoadPlugin() == -1) {
-         gROOT->SetBatch(kTRUE);
-         return;
+
+   TString guiFactory = gEnv->GetValue("Gui.Factory", "native");
+   guiFactory.ToLower();
+   if (guiFactory == "native")
+      guiFactory = "root";
+
+   if (guiFactory == "web") {
+      // web display allows to use batch gui factory
+      gGuiFactory = gBatchGuiFactory;
+   } else {
+      if (auto h = gROOT->GetPluginManager()->FindHandler("TGuiFactory", guiFactory)) {
+         if (h->LoadPlugin() == -1) {
+            gROOT->SetBatch(kTRUE);
+            return;
+         }
+         gGuiFactory = (TGuiFactory *) h->ExecPlugin(0);
       }
-      gGuiFactory = (TGuiFactory *) h->ExecPlugin(0);
    }
 }
 

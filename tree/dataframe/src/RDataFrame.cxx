@@ -642,7 +642,6 @@ parts of the RDataFrame API currently work with this package. The subset that is
 - Count
 - Define
 - DefinePerSample
-- Fill
 - Filter
 - Graph
 - Histo[1,2,3]D
@@ -653,9 +652,12 @@ parts of the RDataFrame API currently work with this package. The subset that is
 - Profile[1,2,3]D
 - Redefine
 - Snapshot
+- Stats
+- StdDev
 - Sum
 - Systematic variations: Vary and [VariationsFor](\ref ROOT::RDF::Experimental::VariationsFor).
 - Parallel submission of distributed graphs: [RunGraphs](\ref ROOT::RDF::RunGraphs).
+- Information about the dataframe: GetColumnNames.
 
 with support for more operations coming in the future. Data sources other than TTree and TChain (e.g. CSV, RNTuple) are
 currently not supported.

@@ -188,7 +188,7 @@ TApplication::TApplication(const char *appClassName, Int_t *argc, char **argv,
    // Initialize the graphics environment
    if (gClassTable->GetDict("TPad")) {
       fgGraphNeeded = kTRUE;
-      InitializeGraphics();
+      InitializeGraphics(gROOT->IsWebDisplay());
    }
 
    // Save current interpreter context
@@ -239,49 +239,55 @@ void TApplication::NeedGraphicsLibs()
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Initialize the graphics environment.
+/// If @param only_web is specified, only web-related part of graphics is loaded
 
-void TApplication::InitializeGraphics()
+void TApplication::InitializeGraphics(Bool_t only_web)
 {
-   if (fgGraphInit || !fgGraphNeeded) return;
+   if (fgGraphInit || !fgGraphNeeded)
+      return;
 
-   // Load the graphics related libraries
-   LoadGraphicsLibs();
+   if (!only_web) {
+      // Load the graphics related libraries
+      LoadGraphicsLibs();
 
-   // Try to load TrueType font renderer. Only try to load if not in batch
-   // mode and Root.UseTTFonts is true and Root.TTFontPath exists. Abort silently
-   // if libttf or libGX11TTF are not found in $ROOTSYS/lib or $ROOTSYS/ttf/lib.
-   const char *ttpath = gEnv->GetValue("Root.TTFontPath",
-                                       TROOT::GetTTFFontDir());
-   char *ttfont = gSystem->Which(ttpath, "arialbd.ttf", kReadPermission);
-   // Check for use of DFSG - fonts
-   if (!ttfont)
-      ttfont = gSystem->Which(ttpath, "FreeSansBold.ttf", kReadPermission);
+      // Try to load TrueType font renderer. Only try to load if not in batch
+      // mode and Root.UseTTFonts is true and Root.TTFontPath exists. Abort silently
+      // if libttf or libGX11TTF are not found in $ROOTSYS/lib or $ROOTSYS/ttf/lib.
+      const char *ttpath = gEnv->GetValue("Root.TTFontPath",
+                                          TROOT::GetTTFFontDir());
+      char *ttfont = gSystem->Which(ttpath, "arialbd.ttf", kReadPermission);
+      // Check for use of DFSG - fonts
+      if (!ttfont)
+         ttfont = gSystem->Which(ttpath, "FreeSansBold.ttf", kReadPermission);
 
-#if !defined(R__WIN32)
-   if (!gROOT->IsBatch() && !strcmp(gVirtualX->GetName(), "X11") &&
-       ttfont && gEnv->GetValue("Root.UseTTFonts", 1)) {
-      if (gClassTable->GetDict("TGX11TTF")) {
-         // in principle we should not have linked anything against libGX11TTF
-         // but with ACLiC this can happen, initialize TGX11TTF by hand
-         // (normally this is done by the static library initializer)
-         ProcessLine("TGX11TTF::Activate();");
-      } else {
-         TPluginHandler *h;
-         if ((h = gROOT->GetPluginManager()->FindHandler("TVirtualX", "x11ttf")))
-            if (h->LoadPlugin() == -1)
-               Info("InitializeGraphics", "no TTF support");
+   #if !defined(R__WIN32)
+      if (!gROOT->IsBatch() && !strcmp(gVirtualX->GetName(), "X11") &&
+          ttfont && gEnv->GetValue("Root.UseTTFonts", 1)) {
+         if (gClassTable->GetDict("TGX11TTF")) {
+            // in principle we should not have linked anything against libGX11TTF
+            // but with ACLiC this can happen, initialize TGX11TTF by hand
+            // (normally this is done by the static library initializer)
+            ProcessLine("TGX11TTF::Activate();");
+         } else {
+            TPluginHandler *h;
+            if ((h = gROOT->GetPluginManager()->FindHandler("TVirtualX", "x11ttf")))
+               if (h->LoadPlugin() == -1)
+                  Info("InitializeGraphics", "no TTF support");
+         }
       }
+   #endif
+      delete [] ttfont;
    }
-#endif
-   delete [] ttfont;
 
-   // Create WM dependent application environment
-   if (fAppImp)
-      delete fAppImp;
-   fAppImp = gGuiFactory->CreateApplicationImp(gROOT->GetName(), &fArgc, fArgv);
-   if (!fAppImp) {
-      MakeBatch();
+   if (!only_web || !fAppImp) {
+      // Create WM dependent application environment
+      if (fAppImp)
+         delete fAppImp;
       fAppImp = gGuiFactory->CreateApplicationImp(gROOT->GetName(), &fArgc, fArgv);
+      if (!fAppImp) {
+         MakeBatch();
+         fAppImp = gGuiFactory->CreateApplicationImp(gROOT->GetName(), &fArgc, fArgv);
+      }
    }
 
    // Create the canvas colors early so they are allocated before
@@ -293,7 +299,7 @@ void TApplication::InitializeGraphics()
    Init();
 
    // Set default screen factor (if not disabled in rc file)
-   if (gEnv->GetValue("Canvas.UseScreenFactor", 1)) {
+   if (!only_web && gEnv->GetValue("Canvas.UseScreenFactor", 1)) {
       Int_t  x, y;
       UInt_t w, h;
       if (gVirtualX) {
@@ -399,19 +405,7 @@ void TApplication::GetOptions(Int_t *argc, char **argv)
          // the web mode is requested
          const char *opt = argv[i] + 5;
          argv[i] = null;
-         TString argw;
-         if (*opt == '=')
-            argw.Append(opt+1);
-         if (argw == "off") {
-            gROOT->SetWebDisplay(argw.Data());
-            gEnv->SetValue("Browser.Name", "TRootBrowser"); // force usage of TBrowser back
-         } else if (gSystem->Load("libROOTWebDisplay") >= 0) {
-            gROOT->SetWebDisplay(argw.Data());
-            gEnv->SetValue("Gui.Factory", "web");
-            gEnv->SetValue("TreeViewer.Name", "RTreeViewer");
-         } else {
-            Error("GetOptions", "--web option not supported, ROOT should be built with -Dwebgui=ON which requires c++17");
-         }
+         gROOT->SetWebDisplay((*opt == '=') ? opt + 1 : "");
       } else if (!strcmp(argv[i], "-e")) {
          argv[i] = null;
          ++i;
@@ -829,7 +823,7 @@ GetUrlForDataMember(const TString &scopeName, const TString &dataMemberName, TDa
    // We create a TString with the name of the scope and the enumeration from which the enumerator is.
    TString scopeEnumeration = dataMember->GetTrueTypeName();
    TString md5EnumClass;
-   if (scopeEnumeration.Contains("(anonymous)")) {
+   if (scopeEnumeration.Contains("(unnamed)")) {
       // FIXME: need to investigate the numbering scheme.
       md5EnumClass.Append(scopeName);
       md5EnumClass.Append("::@1@1");
@@ -1213,17 +1207,12 @@ void TApplication::LoadGraphicsLibs()
    if (guiFactory == "native")
       guiFactory = "root";
 
-   if (guiFactory == "web") {
-      // web display allows to use batch gui factory
-      gGuiFactory = gBatchGuiFactory;
-   } else {
-      if (auto h = gROOT->GetPluginManager()->FindHandler("TGuiFactory", guiFactory)) {
-         if (h->LoadPlugin() == -1) {
-            gROOT->SetBatch(kTRUE);
-            return;
-         }
-         gGuiFactory = (TGuiFactory *) h->ExecPlugin(0);
+   if (auto h = gROOT->GetPluginManager()->FindHandler("TGuiFactory", guiFactory)) {
+      if (h->LoadPlugin() == -1) {
+         gROOT->SetBatch(kTRUE);
+         return;
       }
+      gGuiFactory = (TGuiFactory *) h->ExecPlugin(0);
    }
 }
 
@@ -1484,40 +1473,31 @@ Longptr_t TApplication::ProcessLine(const char *line, Bool_t sync, Int_t *err)
    }
 
    if (!strncmp(line, ".L", 2) || !strncmp(line, ".U", 2)) {
-      TString aclicMode;
-      TString arguments;
-      TString io;
+      TString aclicMode, arguments, io;
       TString fname = gSystem->SplitAclicMode(line+3, aclicMode, arguments, io);
 
       char *mac = gSystem->Which(TROOT::GetMacroPath(), fname, kReadPermission);
-      if (arguments.Length()) {
-         Warning("ProcessLine", "argument(s) \"%s\" ignored with .%c", arguments.Data(),
-                 line[1]);
-      }
+      if (arguments.Length())
+         Warning("ProcessLine", "argument(s) \"%s\" ignored with .%c", arguments.Data(), line[1]);
       Longptr_t retval = 0;
-      if (!mac)
-         Error("ProcessLine", "macro %s not found in path %s", fname.Data(),
-               TROOT::GetMacroPath());
-      else {
-         TString cmd(line+1);
+      if (!mac) {
+         Error("ProcessLine", "macro %s not found in path %s", fname.Data(), TROOT::GetMacroPath());
+      } else {
+         TString cmd(line + 1);
          Ssiz_t posSpace = cmd.Index(' ');
-         if (posSpace == -1) cmd.Remove(1);
-         else cmd.Remove(posSpace);
-         TString tempbuf;
-         if (sync) {
-            tempbuf.Form(".%s %s%s%s", cmd.Data(), mac, aclicMode.Data(),io.Data());
-            retval = gInterpreter->ProcessLineSynch(tempbuf,
-                                                   (TInterpreter::EErrorCode*)err);
-         } else {
-            tempbuf.Form(".%s %s%s%s", cmd.Data(), mac, aclicMode.Data(),io.Data());
-            retval = gInterpreter->ProcessLine(tempbuf,
-                                              (TInterpreter::EErrorCode*)err);
-         }
+         if (posSpace == kNPOS)
+            cmd.Remove(1);
+         else
+            cmd.Remove(posSpace);
+         auto tempbuf = TString::Format(".%s %s%s%s", cmd.Data(), mac, aclicMode.Data(), io.Data());
+         delete[] mac;
+         if (sync)
+            retval = gInterpreter->ProcessLineSynch(tempbuf.Data(), (TInterpreter::EErrorCode *)err);
+         else
+            retval = gInterpreter->ProcessLine(tempbuf.Data(), (TInterpreter::EErrorCode *)err);
       }
 
-      delete [] mac;
-
-      InitializeGraphics();
+      InitializeGraphics(gROOT->IsWebDisplay());
 
       return retval;
    }

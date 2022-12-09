@@ -44,9 +44,8 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/CTestCustom.cmake ${CMAKE_CURRENT_BIN
 #   tutorials directory which is copied to the build area.
 #-------------------------------------------------------------------
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/rootlogon.C "{
-  // Needed by ACLiC to use the current dicrectory for scratch area
+  // Needed by ACLiC to use the current directory for scratch area
   gSystem->SetBuildDir(\".\", kTRUE);
-  gROOT->SetWebDisplay(\"batch\");
 }")
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/rootalias.C "")
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/rootlogoff.C "{}")
@@ -384,6 +383,35 @@ set(extra_veto
   http/*.C
   eve7/*.C
   r/rootlogon.C)
+
+if(MSVC AND ${LLVM_VERSION} VERSION_GREATER_EQUAL 13.0.0 AND NOT llvm13_broken_tests)
+ list(APPEND extra_veto
+      dataframe/df002_dataModel.C
+      dataframe/df007_snapshot.C
+      dataframe/df016_vecOps.C
+      dataframe/df017_vecOpsHEP.C
+      fit/NumericalMinimization.C
+      fit/fit2.C
+      fit/fit2a.C
+      fit/fit2dHist.C
+      graphics/earth.C
+      graphs/motorcycle.C
+      math/multidimSampling.C
+      math/multivarGaus.C
+      tree/basic.C
+      unfold/testUnfold5b.C
+      unfold/testUnfold5c.C
+      unfold/testUnfold5d.C
+      unuran/unuranDemo.C
+      v7/ntuple/ntpl001_staff.C
+      v7/perfcomp.cxx
+      dataframe/df002_dataModel.py
+      dataframe/df016_vecOps.py
+      dataframe/df017_vecOpsHEP.py)
+  if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+    list(APPEND extra_veto math/exampleFunction.py)
+  endif()
+endif()
 
 set(all_veto hsimple.C
              geom/geometry.C

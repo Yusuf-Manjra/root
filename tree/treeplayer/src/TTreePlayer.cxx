@@ -2956,14 +2956,15 @@ void TTreePlayer::StartViewer(Int_t ww, Int_t wh)
    if (!gApplication)
       TApplication::CreateApplication();
    // make sure that the Gpad and GUI libs are loaded
-   TApplication::NeedGraphicsLibs();
-   if (gApplication)
-      gApplication->InitializeGraphics();
 
    TString hname = gEnv->GetValue("TreeViewer.Name", "TTreeViewer");
 
+   TApplication::NeedGraphicsLibs();
+   if (gApplication)
+      gApplication->InitializeGraphics(hname == "RTreeViewer");
+
    if (gROOT->IsBatch()) {
-      if ((hname != "RTreeViewer") || (gROOT->GetWebDisplay() != "server")) {
+      if ((hname != "RTreeViewer") || gROOT->IsWebDisplayBatch()) {
          Warning("StartViewer", "The tree viewer cannot run in batch mode");
          return;
       }

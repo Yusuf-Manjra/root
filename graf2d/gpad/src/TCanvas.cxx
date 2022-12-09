@@ -188,7 +188,7 @@ void TCanvas::Constructor()
    if (gThreadXAR) {
       void *arr[2];
       arr[1] = this;
-      if ((*gThreadXAR)("CANV", 2, arr, 0)) return;
+      if ((*gThreadXAR)("CANV", 2, arr, nullptr)) return;
    }
 
    fCanvas    = nullptr;
@@ -286,7 +286,7 @@ void TCanvas::Constructor(const char *name, const char *title, Int_t form)
       static Int_t ww = 500;
       static Int_t wh = 500;
       arr[1] = this; arr[2] = (void*)name; arr[3] = (void*)title; arr[4] =&ww; arr[5] = &wh;
-      if ((*gThreadXAR)("CANV", 6, arr, 0)) return;
+      if ((*gThreadXAR)("CANV", 6, arr, nullptr)) return;
    }
 
    Init();
@@ -304,7 +304,7 @@ void TCanvas::Constructor(const char *name, const char *title, Int_t form)
       Warning("Constructor","Deleting canvas with same name: %s",name);
       delete old;
    }
-   if (gROOT->IsBatch() && (!gROOT->IsWebDisplay() || gROOT->IsWebDisplayBatch())) {   //We are in Batch mode
+   if (gROOT->IsBatch()) {   //We are in Batch mode
       fWindowTopX = fWindowTopY = 0;
       if (form == 1) {
          fWindowWidth  = gStyle->GetCanvasDefW();
@@ -321,19 +321,20 @@ void TCanvas::Constructor(const char *name, const char *title, Int_t form)
    } else {                  //normal mode with a screen window
       Float_t cx = gStyle->GetScreenFactor();
       if (form < 1 || form > 5) form = 1;
+      auto factory = gROOT->IsWebDisplay() ? gBatchGuiFactory : gGuiFactory;
       if (form == 1) {
          UInt_t uh = UInt_t(cx*gStyle->GetCanvasDefH());
          UInt_t uw = UInt_t(cx*gStyle->GetCanvasDefW());
          Int_t  ux = Int_t(cx*gStyle->GetCanvasDefX());
          Int_t  uy = Int_t(cx*gStyle->GetCanvasDefY());
-         fCanvasImp = gGuiFactory->CreateCanvasImp(this, name, ux, uy, uw, uh);
+         fCanvasImp = factory->CreateCanvasImp(this, name, ux, uy, uw, uh);
       }
       fCw = 500;
       fCh = 500;
-      if (form == 2) fCanvasImp = gGuiFactory->CreateCanvasImp(this, name, 20, 20, UInt_t(cx*500), UInt_t(cx*500));
-      if (form == 3) fCanvasImp = gGuiFactory->CreateCanvasImp(this, name, 30, 30, UInt_t(cx*500), UInt_t(cx*500));
-      if (form == 4) fCanvasImp = gGuiFactory->CreateCanvasImp(this, name, 40, 40, UInt_t(cx*500), UInt_t(cx*500));
-      if (form == 5) fCanvasImp = gGuiFactory->CreateCanvasImp(this, name, 50, 50, UInt_t(cx*500), UInt_t(cx*500));
+      if (form == 2) fCanvasImp = factory->CreateCanvasImp(this, name, 20, 20, UInt_t(cx*500), UInt_t(cx*500));
+      if (form == 3) fCanvasImp = factory->CreateCanvasImp(this, name, 30, 30, UInt_t(cx*500), UInt_t(cx*500));
+      if (form == 4) fCanvasImp = factory->CreateCanvasImp(this, name, 40, 40, UInt_t(cx*500), UInt_t(cx*500));
+      if (form == 5) fCanvasImp = factory->CreateCanvasImp(this, name, 50, 50, UInt_t(cx*500), UInt_t(cx*500));
       if (!fCanvasImp) return;
 
       if (!gROOT->IsBatch() && fCanvasID == -1)
@@ -386,7 +387,7 @@ void TCanvas::Constructor(const char *name, const char *title, Int_t ww, Int_t w
    if (gThreadXAR) {
       void *arr[6];
       arr[1] = this; arr[2] = (void*)name; arr[3] = (void*)title; arr[4] =&ww; arr[5] = &wh;
-      if ((*gThreadXAR)("CANV", 6, arr, 0)) return;
+      if ((*gThreadXAR)("CANV", 6, arr, nullptr)) return;
    }
 
    Init();
@@ -418,7 +419,8 @@ void TCanvas::Constructor(const char *name, const char *title, Int_t ww, Int_t w
       fBatch        = kTRUE;
    } else {
       Float_t cx = gStyle->GetScreenFactor();
-      fCanvasImp = gGuiFactory->CreateCanvasImp(this, name, UInt_t(cx*ww), UInt_t(cx*wh));
+      auto factory = gROOT->IsWebDisplay() ? gBatchGuiFactory : gGuiFactory;
+      fCanvasImp = factory->CreateCanvasImp(this, name, UInt_t(cx*ww), UInt_t(cx*wh));
       if (!fCanvasImp) return;
 
       if (!gROOT->IsBatch() && fCanvasID == -1)
@@ -476,7 +478,7 @@ void TCanvas::Constructor(const char *name, const char *title, Int_t wtopx,
       void *arr[8];
       arr[1] = this;   arr[2] = (void*)name;   arr[3] = (void*)title;
       arr[4] = &wtopx; arr[5] = &wtopy; arr[6] = &ww; arr[7] = &wh;
-      if ((*gThreadXAR)("CANV", 8, arr, 0)) return;
+      if ((*gThreadXAR)("CANV", 8, arr, nullptr)) return;
    }
 
    Init();
@@ -504,7 +506,8 @@ void TCanvas::Constructor(const char *name, const char *title, Int_t wtopx,
       fBatch        = kTRUE;
    } else {                   //normal mode with a screen window
       Float_t cx = gStyle->GetScreenFactor();
-      fCanvasImp = gGuiFactory->CreateCanvasImp(this, name, Int_t(cx*wtopx), Int_t(cx*wtopy), UInt_t(cx*ww), UInt_t(cx*wh));
+      auto factory = gROOT->IsWebDisplay() ? gBatchGuiFactory : gGuiFactory;
+      fCanvasImp = factory->CreateCanvasImp(this, name, Int_t(cx*wtopx), Int_t(cx*wtopy), UInt_t(cx*ww), UInt_t(cx*wh));
       if (!fCanvasImp) return;
 
       if (!gROOT->IsBatch() && fCanvasID == -1)
@@ -538,7 +541,7 @@ void TCanvas::Init()
    // TApplication::NeedGraphicsLibs() has been called by a
    // library static initializer.
    if (gApplication)
-      gApplication->InitializeGraphics();
+      gApplication->InitializeGraphics(gROOT->IsWebDisplay());
 
    // Get some default from .rootrc. Used in fCanvasImp->InitWindow().
    fHighLightColor     = gEnv->GetValue("Canvas.HighLightColor", kRed);
@@ -689,7 +692,7 @@ void TCanvas::Destructor()
    if (gThreadXAR) {
       void *arr[2];
       arr[1] = this;
-      if ((*gThreadXAR)("CDEL", 2, arr, 0)) return;
+      if ((*gThreadXAR)("CDEL", 2, arr, nullptr)) return;
    }
 
    if (ROOT::Detail::HasBeenDeleted(this)) return;
@@ -841,8 +844,8 @@ void TCanvas::CopyPixmaps()
 /// This function is useful when a canvas object has been saved in a Root file.
 /// One can then do:
 /// ~~~ {.cpp}
-///     Root > Tfile f("file.root");
-///     Root > canvas.Draw();
+///     Root > TFile::Open("file.root");
+///     Root > canvas->Draw();
 /// ~~~
 
 void TCanvas::Draw(Option_t *)
@@ -851,7 +854,7 @@ void TCanvas::Draw(Option_t *)
    // TApplication::NeedGraphicsLibs() has been called by a
    // library static initializer.
    if (gApplication)
-      gApplication->InitializeGraphics();
+      gApplication->InitializeGraphics(gROOT->IsWebDisplay());
 
    fDrawn = kTRUE;
 
@@ -876,7 +879,8 @@ void TCanvas::Draw(Option_t *)
       fBatch = kTRUE;
 
    } else {                   //normal mode with a screen window
-      fCanvasImp = gGuiFactory->CreateCanvasImp(this, GetName(), fWindowTopX, fWindowTopY,
+      auto factory = gROOT->IsWebDisplay() ? gBatchGuiFactory : gGuiFactory;
+      fCanvasImp = factory->CreateCanvasImp(this, GetName(), fWindowTopX, fWindowTopY,
                                                 fWindowWidth, fWindowHeight);
       if (!fCanvasImp) return;
       fCanvasImp->ShowMenuBar(TestBit(kMenuBar));
@@ -921,7 +925,8 @@ TObject *TCanvas::DrawClonePad()
       return newCanvas;
    }
    if (fCanvasID == -1) {
-      fCanvasImp = gGuiFactory->CreateCanvasImp(this, GetName(), fWindowTopX, fWindowTopY,
+      auto factory = gROOT->IsWebDisplay() ? gBatchGuiFactory : gGuiFactory;
+      fCanvasImp = factory->CreateCanvasImp(this, GetName(), fWindowTopX, fWindowTopY,
                                              fWindowWidth, fWindowHeight);
       if (!fCanvasImp) return nullptr;
       fCanvasImp->ShowMenuBar(TestBit(kMenuBar));
@@ -1622,7 +1627,7 @@ void TCanvas::Highlighted(TVirtualPad *pad, TObject *obj, Int_t x, Int_t y)
 
 void TCanvas::HighlightConnect(const char *slot)
 {
-   Connect("Highlighted(TVirtualPad*,TObject*,Int_t,Int_t)", 0, 0, slot);
+   Connect("Highlighted(TVirtualPad*,TObject*,Int_t,Int_t)", nullptr, nullptr, slot);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2494,7 +2499,7 @@ void TCanvas::Update()
       void *arr[3];
       arr[1] = this;
       arr[2] = castFromFuncToVoidPtr.fVoidPtr;
-      if ((*gThreadXAR)("CUPD", 3, arr, 0)) return;
+      if ((*gThreadXAR)("CUPD", 3, arr, nullptr)) return;
    }
 
    if (!fCanvasImp) return;

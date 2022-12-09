@@ -435,17 +435,24 @@ double RooProdPdf::calculate(const RooProdPdf::CacheElem& cache, bool /*verbose*
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Evaluate product of PDFs in batch mode.
-void RooProdPdf::computeBatch(cudaStream_t* stream, double* output, size_t nEvents, RooFit::Detail::DataMap const& dataMap) const
+void RooProdPdf::calculateBatch(const RooProdPdf::CacheElem& cache, cudaStream_t* stream, double* output, size_t nEvents, RooFit::Detail::DataMap const& dataMap) const
 {
-  RooBatchCompute::VarVector pdfs;
-  pdfs.reserve(_pdfList.size());
-  for (const RooAbsArg* i:_pdfList) {
-    auto span = dataMap.at(i);
-    pdfs.push_back(span);
-  }
-  RooBatchCompute::ArgVector special{ static_cast<double>(pdfs.size()) };
   auto dispatch = stream ? RooBatchCompute::dispatchCUDA : RooBatchCompute::dispatchCPU;
-  dispatch->compute(stream, RooBatchCompute::ProdPdf, output, nEvents, pdfs, special);
+
+  if (cache._isRearranged) {
+    auto numerator = dataMap.at(cache._rearrangedNum.get());
+    auto denominator = dataMap.at(cache._rearrangedDen.get());
+    dispatch->compute(stream, RooBatchCompute::Ratio, output, nEvents, {numerator, denominator});
+  } else {
+    RooBatchCompute::VarVector factors;
+    factors.reserve(cache._partList.size());
+    for (const RooAbsArg *i : cache._partList) {
+       auto span = dataMap.at(i);
+       factors.push_back(span);
+    }
+    RooBatchCompute::ArgVector special{static_cast<double>(factors.size())};
+    dispatch->compute(stream, RooBatchCompute::ProdPdf, output, nEvents, factors, special);
+  }
 }
 
 namespace {
@@ -673,11 +680,6 @@ void RooProdPdf::factorizeProduct(const RooArgSet& normSet, const RooArgSet& int
 
 Int_t RooProdPdf::getPartIntList(const RooArgSet* nset, const RooArgSet* iset, const char* isetRangeName) const
 {
-//    cout << "   FOLKERT::RooProdPdf::getPartIntList(" << GetName() <<")  nset = " << (nset?*nset:RooArgSet()) << endl
-//         << "   _normRange = " << _normRange << endl
-//         << "   iset = " << (iset?*iset:RooArgSet()) << endl
-//         << "   isetRangeName = " << (isetRangeName?isetRangeName:"<null>") << endl ;
-
   // Check if this configuration was created before
   Int_t sterileIdx(-1);
 
@@ -685,8 +687,25 @@ Int_t RooProdPdf::getPartIntList(const RooArgSet* nset, const RooArgSet* iset, c
     return _cacheMgr.lastIndex();
   }
 
+  std::unique_ptr<CacheElem> cache = createCacheElem(nset, iset, isetRangeName);
+
+  // Store the partial integral list and return the assigned code
+  return _cacheMgr.setObj(nset, iset, cache.release(), RooNameReg::ptr(isetRangeName));
+}
+
+
+
+std::unique_ptr<RooProdPdf::CacheElem> RooProdPdf::createCacheElem(const RooArgSet* nset,
+                                                       const RooArgSet* iset,
+                                                       const char* isetRangeName) const
+{
+//    cout << "   FOLKERT::RooProdPdf::getPartIntList(" << GetName() <<")  nset = " << (nset?*nset:RooArgSet()) << endl
+//         << "   _normRange = " << _normRange << endl
+//         << "   iset = " << (iset?*iset:RooArgSet()) << endl
+//         << "   isetRangeName = " << (isetRangeName?isetRangeName:"<null>") << endl ;
+
   // Create containers for partial integral components to be generated
-  auto cache = new CacheElem;
+  auto cache = std::make_unique<CacheElem>();
 
   // Factorize the product in irreducible terms for this nset
   RooLinkedList terms, norms, imp, ints, cross;
@@ -965,9 +984,6 @@ Int_t RooProdPdf::getPartIntList(const RooArgSet* nset, const RooArgSet* iset, c
     }
   }
 
-  // Store the partial integral list and return the assigned code
-  Int_t returnCode = _cacheMgr.setObj(nset, iset, (RooAbsCacheElement*)cache, RooNameReg::ptr(isetRangeName));
-
   // WVE DEBUG PRINTING
 //   cout << "RooProdPdf::getPartIntList(" << GetName() << ") made cache " << cache << " with the following nset pointers ";
 //   TIterator* nliter = nsetList->MakeIterator();
@@ -988,7 +1004,6 @@ Int_t RooProdPdf::getPartIntList(const RooArgSet* nset, const RooArgSet* iset, c
 //   cout << "   code = " << returnCode << endl
 //        << "   isetRangeName = " << (isetRangeName?isetRangeName:"<null>") << endl;
 
-
   // Need to rearrange product in case of multiple ranges
   if (_normRange.Contains(",")) {
     rearrangeProduct(*cache);
@@ -1001,9 +1016,8 @@ Int_t RooProdPdf::getPartIntList(const RooArgSet* nset, const RooArgSet* iset, c
   norms.Delete();
   cross.Delete();
 
-  return returnCode;
+  return cache;
 }
-
 
 
 
@@ -1693,15 +1707,6 @@ double RooProdPdf::analyticalIntegralWN(Int_t code, const RooArgSet* normSet, co
 
   return val ;
 }
-
-
-
-////////////////////////////////////////////////////////////////////////////////
-/// Obsolete
-
-bool RooProdPdf::checkObservables(const RooArgSet* /*nset*/) const
-{ return false ; }
-
 
 
 

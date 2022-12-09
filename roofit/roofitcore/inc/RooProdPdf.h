@@ -55,8 +55,6 @@ public:
   TObject* clone(const char* newname) const override { return new RooProdPdf(*this,newname) ; }
   ~RooProdPdf() override ;
 
-  bool checkObservables(const RooArgSet* nset) const override ;
-
   bool forceAnalyticalInt(const RooAbsArg& dep) const override ;
   Int_t getAnalyticalIntegralWN(RooArgSet& allVars, RooArgSet& numVars, const RooArgSet* normSet, const char* rangeName=nullptr) const override ;
   double analyticalIntegralWN(Int_t code, const RooArgSet* normSet, const char* rangeName=nullptr) const override ;
@@ -102,8 +100,6 @@ public:
 private:
 
   double evaluate() const override ;
-  void computeBatch(cudaStream_t*, double* output, size_t nEvents, RooFit::Detail::DataMap const&) const override;
-  inline bool canComputeBatchWithCuda() const override { return true; }
 
   std::unique_ptr<RooAbsReal> makeCondPdfRatioCorr(RooAbsReal& term, const RooArgSet& termNset, const RooArgSet& termImpSet, const char* normRange, const char* refRange) const ;
 
@@ -151,6 +147,9 @@ private:
     void printCompactTreeHook(std::ostream&, const char *, Int_t, Int_t) override ;
     void writeToStream(std::ostream& os) const ;
   } ;
+
+  std::unique_ptr<CacheElem> createCacheElem(const RooArgSet* nset, const RooArgSet* iset, const char* isetRangeName=nullptr) const;
+
   mutable RooObjCacheManager _cacheMgr ; //! The cache manager
 
   CacheElem* getCacheElem(RooArgSet const* nset) const ;
@@ -158,9 +157,11 @@ private:
   RooAbsReal* specializeIntegral(RooAbsReal& orig, const char* targetRangeName) const ;
   RooAbsReal* specializeRatio(RooFormulaVar& input, const char* targetRangeName) const ;
   double calculate(const RooProdPdf::CacheElem& cache, bool verbose=false) const ;
+  void calculateBatch(const RooProdPdf::CacheElem& cache, cudaStream_t*, double* output, size_t nEvents, RooFit::Detail::DataMap const&) const;
 
 
   friend class RooProdGenContext ;
+  friend class RooFixedProdPdf ;
   RooAbsGenContext* genContext(const RooArgSet &vars, const RooDataSet *prototype=nullptr,
                                   const RooArgSet *auxProto=nullptr, bool verbose= false) const override ;
 

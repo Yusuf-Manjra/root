@@ -454,8 +454,6 @@ class TreeHeadNode(HeadNode):
             # Gather information about friend trees. Check that we got an
             # RFriendInfo struct and that it's not empty
             if (current_range.friendinfo is not None):
-                # Zip together the information about friend trees. Each
-                # element of the iterator represents a single friend tree.
                 # If the friend is a TChain, the zipped information looks like:
                 # (name, alias), (file1.root, file2.root, ...), (subname1, subname2, ...)
                 # If the friend is a TTree, the file list is made of
@@ -468,8 +466,8 @@ class TreeHeadNode(HeadNode):
                     current_range.friendinfo.fFriendChainSubNames
                 )
                 for (friend_name, friend_alias), friend_filenames, friend_chainsubnames in zipped_friendinfo:
-                    friends = list(zip_longest(friend_chainsubnames, friend_filenames, fillvalue=friend_name))
-                    ds.AddFriend(friends, friend_alias)
+                    friend_chainsubnames = friend_chainsubnames if len(friend_chainsubnames) > 0 else [friend_name]*len(friend_filenames)
+                    ds.WithGlobalFriends(friend_chainsubnames, friend_filenames, friend_alias)
 
         def build_rdf_from_range(current_range: Ranges.TreeRangePerc) -> TaskObjects:
             """
@@ -484,10 +482,10 @@ class TreeHeadNode(HeadNode):
             if clustered_range is None:
                 return TaskObjects(None, entries_in_trees)
 
-            ds = ROOT.RDF.Experimental.RDatasetSpec(
-                zip(clustered_range.treenames, clustered_range.filenames),
-                (clustered_range.globalstart, clustered_range.globalend)
-            )
+            ds = ROOT.RDF.Experimental.RDatasetSpec()
+            # add a group with no name to represent the whole dataset
+            ds.AddGroup(("", clustered_range.treenames, clustered_range.filenames))
+            ds.WithGlobalRange((clustered_range.globalstart, clustered_range.globalend))
 
             attach_friend_info_if_present(clustered_range, ds)
 
@@ -507,7 +505,7 @@ class TreeHeadNode(HeadNode):
 
         # User could have requested to read the same file multiple times indeed
         input_files_and_trees = [
-            f"{filename}?#{treename}" for filename, treename in zip(self.inputfiles, self.subtreenames)
+            f"{filename}/{treename}" for filename, treename in zip(self.inputfiles, self.subtreenames)
         ]
         files_counts = Counter(input_files_and_trees)
 

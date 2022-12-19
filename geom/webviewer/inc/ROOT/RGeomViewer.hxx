@@ -72,6 +72,11 @@ public:
       fDesc.SetVisLevel(lvl);
    }
 
+   void SetTopVisible(bool on = true)
+   {
+      fDesc.SetTopVisible(on);
+   }
+
    /** Configures default hierarchy browser visibility, only has effect before showing web window */
    void SetShowHierarchy(bool on = true) { fShowHierarchy = on; }
 
@@ -84,7 +89,7 @@ public:
 
    void Update();
 
-   void SaveImage(const std::string &fname = "geometry.png");
+   void SaveImage(const std::string &fname = "geometry.png", int width = 0, int height = 0);
 
 };
 

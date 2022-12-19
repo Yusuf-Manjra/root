@@ -18,6 +18,7 @@
 #include "TSystem.h"
 #include "TStyle.h"
 #include "TCanvas.h"
+#include "TButton.h"
 #include "TFrame.h"
 #include "TPaveText.h"
 #include "TPaveStats.h"
@@ -55,23 +56,6 @@ Basic TCanvasImp ABI implementation for Web-based GUI
 Provides painting of main ROOT6 classes in web browsers
 
 */
-
-class PadContext {
-   TVirtualPad *savedPad{nullptr};
-public:
-   PadContext(TVirtualPad *setPad = nullptr)
-   {
-      savedPad = gPad;
-      if (gPad != setPad)
-         gPad = setPad;
-   }
-   ~PadContext()
-   {
-      if (gPad != savedPad)
-         gPad = savedPad;
-   }
-};
-
 
 using namespace std::string_literals;
 
@@ -150,6 +134,7 @@ Bool_t TWebCanvas::IsJSSupportedClass(TObject *obj, Bool_t many_primitives)
                             {"TSpline3"},
                             {"TSpline5"},
                             {"TGeoManager"},
+                            {"TGeoVolume"},
                             {}};
 
    // fast check of class name
@@ -218,7 +203,7 @@ void TWebCanvas::CreateObjectSnapshot(TPadWebSnapshot &master, TPad *pad, TObjec
    auto *painter = dynamic_cast<TWebPadPainter *>(Canvas()->GetCanvasPainter());
 
    TView *view = nullptr;
-   TVirtualPad *savepad = gPad;
+   auto savepad = gPad;
 
    pad->cd();
 
@@ -329,8 +314,10 @@ void TWebCanvas::CreatePadSnapshot(TPadWebSnapshot &paddata, TPad *pad, Long64_t
    // send primitives if version 0 or actual pad version grater than already send version
    bool process_primitives = (version == 0) || (pad_status.fVersion > version);
 
-   paddata.SetActive(pad == gPad);
-   paddata.SetObjectIDAsPtr(pad);
+   if (paddata.IsSetObjectIds()) {
+      paddata.SetActive(pad == gPad);
+      paddata.SetObjectIDAsPtr(pad);
+   }
    paddata.SetSnapshot(TWebSnapshot::kSubPad, pad); // add ref to the pad
    paddata.SetWithoutPrimitives(!process_primitives);
 
@@ -370,14 +357,14 @@ void TWebCanvas::CreatePadSnapshot(TPadWebSnapshot &paddata, TPad *pad, Long64_t
       if (obj->InheritsFrom(THStack::Class())) {
          // workaround for THStack, create extra components before sending to client
          auto hs = static_cast<THStack *>(obj);
-         PadContext ctxt(pad);
+         TVirtualPad::TContext ctxt(pad, kFALSE);
          hs->BuildPrimitives(iter.GetOption());
          has_histo = true;
       } else if (obj->InheritsFrom(TMultiGraph::Class())) {
          // workaround for TMultiGraph
          if (opt.Contains("A")) {
             auto mg = static_cast<TMultiGraph *>(obj);
-            PadContext ctxt;
+            TVirtualPad::TContext ctxt(kFALSE);
             mg->GetHistogram(); // force creation of histogram without any drawings
             has_histo = true;
          }
@@ -1288,8 +1275,18 @@ Bool_t TWebCanvas::ProcessData(unsigned connid, const std::string &arg)
       if (click && IsFirstConn(connid) && !IsReadOnly()) {
 
          TPad *pad = dynamic_cast<TPad *>(FindPrimitive(click->padid));
+
+         if (pad && pad->InheritsFrom(TButton::Class())) {
+            auto btn = (TButton *) pad;
+            const char *mthd = btn->GetMethod();
+            if (mthd && *mthd) {
+               TVirtualPad::TContext ctxt(gROOT->GetSelectedPad(), kTRUE, kTRUE);
+               gROOT->ProcessLine(mthd);
+            }
+            return kTRUE;
+         }
+
          if (pad && (pad != gPad)) {
-            Info("ProcessData", "Activate pad %s", pad->GetName());
             gPad = pad;
             Canvas()->SetClickSelectedPad(pad);
             if (fActivePadChangedSignal)
@@ -1532,6 +1529,7 @@ UInt_t TWebCanvas::GetWindowGeometry(Int_t &x, Int_t &y, UInt_t &w, UInt_t &h)
    return 0;
 }
 
+
 //////////////////////////////////////////////////////////////////////////////////////////
 /// if canvas or any subpad was modified,
 /// scan all primitives in the TCanvas and subpads and convert them into
@@ -1606,6 +1604,28 @@ Bool_t TWebCanvas::WaitWhenCanvasPainted(Long64_t ver)
    return kFALSE;
 }
 
+TString TWebCanvas::CreatePadJSON(TPad *pad, Int_t json_compression)
+{
+   TString res;
+   if (!pad)
+      return res;
+
+   TCanvas *c = dynamic_cast<TCanvas *>(pad);
+   if (c) {
+      res = CreateCanvasJSON(c, json_compression);
+   } else {
+      auto imp = std::make_unique<TWebCanvas>(pad->GetCanvas(), pad->GetName(), 0, 0, 1000, 500);
+
+      TPadWebSnapshot holder(true, false); // readonly, no ids
+
+      imp->CreatePadSnapshot(holder, pad, 0, [&res, json_compression](TPadWebSnapshot *snap) {
+         res = TBufferJSON::ToJSON(snap, json_compression);
+      });
+   }
+
+   return res;
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////
 /// Create JSON painting output for given canvas
 /// Produce JSON can be used for offline drawing with JSROOT
@@ -1620,7 +1640,7 @@ TString TWebCanvas::CreateCanvasJSON(TCanvas *c, Int_t json_compression)
    {
       auto imp = std::make_unique<TWebCanvas>(c, c->GetName(), 0, 0, 1000, 500);
 
-      TCanvasWebSnapshot holder(true); // always readonly
+      TCanvasWebSnapshot holder(true, false); // readonly, no ids
 
       imp->CreatePadSnapshot(holder, c, 0, [&res, json_compression](TPadWebSnapshot *snap) {
          res = TBufferJSON::ToJSON(snap, json_compression);
@@ -1644,7 +1664,7 @@ Int_t TWebCanvas::StoreCanvasJSON(TCanvas *c, const char *filename, const char *
    {
       auto imp = std::make_unique<TWebCanvas>(c, c->GetName(), 0, 0, 1000, 500);
 
-      TCanvasWebSnapshot holder(true); // always readonly
+      TCanvasWebSnapshot holder(true, false); // readonly, no ids
 
       imp->CreatePadSnapshot(holder, c, 0, [&res, filename, option](TPadWebSnapshot *snap) {
          res = TBufferJSON::ExportToFile(filename, snap, option);
@@ -1655,19 +1675,19 @@ Int_t TWebCanvas::StoreCanvasJSON(TCanvas *c, const char *filename, const char *
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
-/// Create image using batch (headless) capability of Chrome browser
+/// Create image using batch (headless) capability of Chrome or Firefox browsers
 /// Supported png, jpeg, svg, pdf formats
 
-bool TWebCanvas::ProduceImage(TCanvas *c, const char *fileName, Int_t width, Int_t height)
+bool TWebCanvas::ProduceImage(TPad *pad, const char *fileName, Int_t width, Int_t height)
 {
-   if (!c)
+   if (!pad)
       return false;
 
-   auto json = TWebCanvas::CreateCanvasJSON(c, TBufferJSON::kNoSpaces + TBufferJSON::kSameSuppression);
+   auto json = TWebCanvas::CreatePadJSON(pad, TBufferJSON::kNoSpaces + TBufferJSON::kSameSuppression);
    if (!json.Length())
       return false;
 
-   return ROOT::Experimental::RWebDisplayHandle::ProduceImage(fileName, json.Data(), width ? width : c->GetWw(), height ? height : c->GetWh());
+   return ROOT::Experimental::RWebDisplayHandle::ProduceImage(fileName, json.Data(), width ? width : pad->GetWw(), height ? height : pad->GetWh());
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -1725,7 +1745,7 @@ TPad *TWebCanvas::ProcessObjectOptions(TWebObjectOptions &item, TPad *pad, int i
       if (obj && obj->InheritsFrom(TPave::Class())) {
          TPave *pave = static_cast<TPave *>(obj);
          if ((item.fopt.size() >= 4) && objpad) {
-            PadContext ctxt(objpad);
+            TVirtualPad::TContext ctxt(objpad, kFALSE);
 
             // first time need to overcome init problem
             pave->ConvertNDCtoPad();

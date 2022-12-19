@@ -15,6 +15,7 @@
 #include "cling/Utils/Output.h"
 #include "cling/Utils/Paths.h"
 #include "cling/Utils/Platform.h"
+#include "cling/Utils/Utils.h"
 
 #include "clang/AST/ASTContext.h"
 #include "clang/Basic/Builtins.h"
@@ -50,6 +51,7 @@
 #include "llvm/Target/TargetOptions.h"
 
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 #include <limits>
 #include <memory>
@@ -813,12 +815,6 @@ namespace {
     PPOpts.addMacroDef("__CLING__GNUC_MINOR__=" ClingStringify(__GNUC_MINOR__));
 #elif defined(_MSC_VER)
     PPOpts.addMacroDef("__CLING__MSVC__=" ClingStringify(_MSC_VER));
-#if (_MSC_VER >= 1926)
-    // FIXME: Silly workaround for cling not being able to parse the STL
-    //        headers anymore after the update of Visual Studio v16.7.0
-    //        To be checked/removed after the upgrade of LLVM & Clang
-    PPOpts.addMacroDef("_HAS_CONDITIONAL_EXPLICIT=0");
-#endif
 #endif
 
 // https://gcc.gnu.org/onlinedocs/libstdc++/manual/using_dual_abi.html
@@ -1249,6 +1245,12 @@ namespace {
     std::vector<const char*> argvCompile(argv, argv+1);
     argvCompile.reserve(argc+32);
 
+    bool debuggingEnabled =
+        cling::utils::ConvertEnvValueToBool(std::getenv("CLING_DEBUG"));
+
+    bool profilingEnabled =
+        cling::utils::ConvertEnvValueToBool(std::getenv("CLING_PROFILE"));
+
 #if __APPLE__ && __arm64__
     argvCompile.push_back("--target=arm64-apple-darwin20.3.0");
 #endif
@@ -1328,6 +1330,16 @@ namespace {
     // target.
     if(COpts.CUDAHost)
       argvCompile.push_back("--cuda-host-only");
+
+#ifdef __linux__
+    // Keep frame pointer to make JIT stack unwinding reliable for profiling
+    if (profilingEnabled)
+      argvCompile.push_back("-fno-omit-frame-pointer");
+#endif
+
+    // Disable optimizations and keep frame pointer when debugging
+    if (debuggingEnabled)
+      argvCompile.push_back("-O0 -fno-omit-frame-pointer");
 
     // argv[0] already inserted, get the rest
     argvCompile.insert(argvCompile.end(), argv+1, argv + argc);
@@ -1668,7 +1680,10 @@ namespace {
     // adjusted per transaction in IncrementalParser::codeGenTransaction().
     CGOpts.setInlining(CodeGenOptions::NormalInlining);
 
-    // CGOpts.setDebugInfo(clang::CodeGenOptions::FullDebugInfo);
+    // Add debugging info when debugging or profiling
+    if (debuggingEnabled || profilingEnabled)
+      CGOpts.setDebugInfo(codegenoptions::FullDebugInfo);
+
     // CGOpts.EmitDeclMetadata = 1; // For unloading, for later
     // aliasing the complete ctor to the base ctor causes the JIT to crash
     CGOpts.CXXCtorDtorAliases = 0;

@@ -57,7 +57,7 @@ The most significant bit is used to indicate that there are more than 63 feature
 That means that readers need to continue reading feature flags as long as their signed integer value is negative.
 
 
-### Frames
+## Frames
 
 RNTuple envelopes can store records and lists of basic types and other records or lists by means of **frames**.
 The frame has the following format
@@ -88,18 +88,18 @@ This approach ensures that frames can be extended in future file format versions
 without breaking the deserialization of older readers.
 
 
-### Locators and Envelope Links
+## Locators and Envelope Links
 
 A locator is a generalized way to specify a certain byte range on the storage medium.
 For disk-based storage, the locator is just byte offset and byte size.
-For object stores, the locator can specify a certain object ID.
-The locator as the following format
+For other storage systems, the locator contains enough information to retrieve the referenced block, e.g. in object stores, the locator can specify a certain object ID.
+The locator has the following format
 
 ```
  0                   1                   2                   3
  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|                             Size              |     Type    |T|
+|                             Size                            |T|
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 |                                                               |
 +                             Offset                            +
@@ -107,28 +107,68 @@ The locator as the following format
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 ```
 
-_Size_: If type is zero, the number of bytes to read, i.e. the compressed size of the referenced block.
-Otherwise the size of the locator itself.
+_Size_: If `T` is zero, the number of bytes to read, i.e. the compressed size of the referenced block.
+Otherwise the 16 least-significant bits, i.e bits 0:15, specify the size of the locator itself (see below).
 
-_T(ype)_: Zero for an on-disk or in-file locator, 1 otherwise.
+_T(ype)_: Zero for a simple on-disk or in-file locator, 1 otherwise.
 Can be interpreted as the sign bit of the size, i.e. negative sizes indicate non-disk locators.
 In this case, the locator should be interpreted like a frame, i.e. size indicates the _size of the locator itself_.
-Only for non-disk locators, the last 8 bits of the size should be interpreted as a locator type.
-To determine the locator type, the absolute value of the 8bit integer should be taken.
-The type can take one of the following values
-
-| Type | Meaning         |
-|------|-----------------|
-| 0x01 | 64bit object ID |
-| 0x02 | URI string      |
 
 _Offset_:
 For on-disk / in-file locators, the 64bit byte offset of the referenced byte range counted from the start of the file.
-For object ID locators, specifies the 64bit object ID.
+
+For non-disk locators, i.e. `T` == 1, the locator format is as follows
+
+```
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|              Size             |   Reserved    |     Type    |T|
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        LOCATOR PAYLOAD                        |
+|                              ...                              |
+```
+
+In this case, the last 8 bits of the size should be interpreted as a locator type.
+To determine the locator type, the absolute value of the 8bit integer should be taken.
+The type can take one of the following values
+
+| Type | Meaning      | Payload format     |
+|------|--------------|--------------------|
+| 0x01 | URI string   | [ASCII characters] |
+| 0x02 | DAOS locator | Object64           |
+
+The range 0x03 - 0x7f is currently unused. Additional types can be registered in the future.
 For URI locators, the locator contains the ASCII characters of the URI following the size and the type.
+Each locator type follows a given format for the payload (see Section "Well-known payload formats" below).
+
+_Reserved_ is an 8bit field that can be used by the storage backend corresponding to the type in order to store additional information about the locator.
 
 An envelope link consists of a 32bit unsigned integer that specifies the uncompressed size of the envelope
 followed by a locator.
+
+### Well-known Payload Formats
+
+This section describes the well-known payload formats used in non-disk locators.
+Note that locators having a different value for _Type_ may share a given payload format (see the table above).
+
+- _Object64_: Targets object storage systems in which 64bit suffice to locate a specific object. The payload has the following format
+```
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                          Content size                         |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                                                               |
++                            Location                           +
+|                                                               |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+```
+
+_Content size_: the number of bytes to read, i.e. the compressed size of the referenced block.
+
+_Location_: 64bit object address; its specific use depends on the object store.
+In particular, it might contain a partial address that can be qualified using some other information depending on the storage backend, e.g. a URL might be generated based on this value.
 
 
 ## Envelopes

@@ -124,6 +124,12 @@ class RLoopManager : public RNodeBase {
    std::shared_ptr<TTree> fTree{nullptr};
    Long64_t fBeginEntry{0};
    Long64_t fEndEntry{std::numeric_limits<Long64_t>::max()};
+
+   /// Keys are `fname + "/" + treename` as RSampleInfo::fID; Values are pointers to the corresponding group
+   std::unordered_map<std::string, ROOT::RDF::Experimental::RDatasetGroup *> fDatasetGroupMap;
+   /// Groups need to survive throughout the whole event loop, hence stored as an attribute
+   std::vector<ROOT::RDF::Experimental::RDatasetGroup> fDatasetGroups;
+
    std::vector<std::unique_ptr<TTree>> fFriends; ///< Friends of the fTree. Only used if we constructed fTree ourselves.
    const ColumnNames_t fDefaultColumns;
    const ULong64_t fNEmptyEntries{0};

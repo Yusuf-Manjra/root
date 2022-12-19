@@ -17,6 +17,7 @@
 #define ROO_GLOBAL_FUNC
 
 #include "RooCmdArg.h"
+#include "RooLinkedList.h"
 #include "RooArgSet.h"
 
 #include "ROOT/RConfig.hxx"
@@ -72,6 +73,10 @@ namespace Experimental {
 /// Get a handle on the default BatchMode option that is used when creating
 /// likelihoods. \note Experimental, the interface might change in the future.
 std::string& defaultBatchMode();
+
+/// Configuration options for parallel minimization with multiprocessing library
+RooCmdArg ParallelGradientOptions(bool enable=true, int orderStrategy=0, int chainFactor=1) ;
+RooCmdArg ParallelDescentOptions(bool enable=false, int splitStrategy=0, int numSplits=4) ;
 
 } // Experimental
 
@@ -209,8 +214,9 @@ RooCmdArg EventRange(Int_t nStart, Int_t nStop) ;
 RooCmdArg Extended(bool flag=true) ;
 RooCmdArg DataError(Int_t) ;
 RooCmdArg NumCPU(Int_t nCPU, Int_t interleave=0) ;
-RooCmdArg Parallelize(int nWorkers, bool parallelGradient, bool parallelLikelihood) ;
-RooCmdArg NewStyle(bool flag=false) ;
+RooCmdArg Parallelize(int nWorkers) ;
+RooCmdArg ModularL(bool flag=false) ;
+RooCmdArg TimingAnalysis(bool timingAnalysis) ;
 
 RooCmdArg BatchMode(std::string const& batchMode="cpu");
 // The const char * overload is necessary, otherwise the compiler will cast a
@@ -255,6 +261,7 @@ RooCmdArg Minos(const RooArgSet& minosArgs) ;
 RooCmdArg SplitRange(bool flag=true) ;
 RooCmdArg SumCoefRange(const char* rangeName) ;
 RooCmdArg Constrain(const RooArgSet& params) ;
+RooCmdArg MaxCalls(int n) ;
 
 template<class... Args_t>
 RooCmdArg GlobalObservables(Args_t &&... argsOrArgSet) {
@@ -394,7 +401,24 @@ RooConstVar& RooConst(double val) ;
 /**
  * @}
  */
+
+namespace Detail {
+
+// Function to pack an arbitrary number of RooCmdArgs into a RooLinkedList. Implementation detail of many high-level RooFit functions.
+template <typename... Args>
+inline std::unique_ptr<RooLinkedList> createCmdList(Args &&... args)
+{
+  auto cmdList = std::make_unique<RooLinkedList>();
+  for (auto * arg : {args...}) {
+    cmdList->Add(const_cast<RooCmdArg*>(arg));
+    //cmdList->Add(new RooCmdArg{arg});
+  }
+  return cmdList;
 }
+
+} // namespace Detail
+
+} // namespace RooFit
 
 namespace RooFitShortHand {
 

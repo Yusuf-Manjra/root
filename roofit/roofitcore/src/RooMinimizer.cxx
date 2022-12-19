@@ -22,7 +22,7 @@ RooMinimizer is a wrapper class around ROOT::Fit:Fitter that
 provides a seamless interface between the minimizer functionality
 and the native RooFit interface.
 By default the Minimizer is MINUIT for classic mode and MINUIT2
-for parallelized mode (activated with the `RooFit::NewStyle(true)`
+for parallelized mode (activated with the `RooFit::ModularL(true)`
 parameter or by passing a RooRealL function as the minimization
 target).
 RooMinimizer can minimize any RooAbsReal function with respect to
@@ -58,6 +58,7 @@ automatic PDF optimization.
 #include "RooFit/TestStatistics/RooRealL.h"
 #ifdef R__HAS_ROOFIT_MULTIPROCESS
 #include "RooFit/MultiProcess/Config.h"
+#include "RooFit/MultiProcess/ProcessTimer.h"
 #endif
 
 #include "TClass.h"
@@ -104,32 +105,36 @@ RooMinimizer::RooMinimizer(RooAbsReal &function, Config const &cfg) : _cfg(cfg)
    initMinimizerFirstPart();
    auto nll_real = dynamic_cast<RooFit::TestStatistics::RooRealL *>(&function);
    if (nll_real != nullptr) {
-      if (_cfg.parallelGradient || _cfg.parallelLikelihood) { // new test statistic with multiprocessing library with
-                                                              // parallel likelihood or parallel gradient
+      if (_cfg.parallelize != 0) { // new test statistic with multiprocessing library with
+                                   // parallel likelihood or parallel gradient
 #ifdef R__HAS_ROOFIT_MULTIPROCESS
-         if (!_cfg.parallelGradient) {
+         if (!_cfg.enableParallelGradient) {
             // Note that this is necessary because there is currently no serial-mode LikelihoodGradientWrapper.
             // We intend to repurpose RooGradMinimizerFcn to build such a LikelihoodGradientSerial class.
-            coutI(InputArguments) << "New style likelihood detected and likelihood parallelization requested, "
+            coutI(InputArguments) << "Modular likelihood detected and likelihood parallelization requested, "
                                   << "also setting parallel gradient calculation mode." << std::endl;
+            _cfg.enableParallelGradient = 1;
          }
-         RooFit::MultiProcess::Config::setDefaultNWorkers(_cfg.nWorkers);
+         // If _cfg.parallelize is larger than zero set the number of workers to that value. Otherwise do not do anything and let 
+         // RooFit::MultiProcess handle the number of workers
+         if (_cfg.parallelize > 0) RooFit::MultiProcess::Config::setDefaultNWorkers(_cfg.parallelize);
+         RooFit::MultiProcess::Config::setTimingAnalysis(_cfg.timingAnalysis);
 
          _fcn = std::make_unique<RooFit::TestStatistics::MinuitFcnGrad>(
             nll_real->getRooAbsL(), this, _theFitter->Config().ParamsSettings(),
             RooFit::TestStatistics::LikelihoodMode{
-               static_cast<RooFit::TestStatistics::LikelihoodMode>(int(_cfg.parallelLikelihood))},
+               static_cast<RooFit::TestStatistics::LikelihoodMode>(int(_cfg.enableParallelDescent))},
             RooFit::TestStatistics::LikelihoodGradientMode::multiprocess);
 #else
          throw std::logic_error(
-            "Parallel likelihood or gradient evaluation requested, but ROOT was not compiled with multiprocessing enabled, "
+            "Parallel minimization requested, but ROOT was not compiled with multiprocessing enabled, "
             "please recompile with -Droofit_multiprocess=ON for parallel evaluation");
 #endif
-      } else { // new test statistic non parallel
-         coutW(InputArguments) << "Requested new-style likelihood without gradient parallelization, some features such as offsetting "
-                               << "may not work yet. Old-style likelihoods are more reliable without parallelization." 
+      } else { // modular test statistic non parallel
+         coutW(InputArguments) << "Requested modular likelihood without gradient parallelization, some features such as offsetting "
+                               << "may not work yet. Non-modular likelihoods are more reliable without parallelization." 
                                << std::endl;
-         // The RooRealL that is used in the case where the new style likelihood is being passed to a RooMinimizerFcn does not have
+         // The RooRealL that is used in the case where the modular likelihood is being passed to a RooMinimizerFcn does not have
          // offsetting implemented. Therefore, offsetting will not work in this case. Other features might also not work since the 
          // RooRealL was not intended for minimization. Further development is required to make the MinuitFcnGrad also handle serial gradient
          // minimization. The MinuitFcnGrad accepts a RooAbsL and has offsetting implemented, thus omitting the need for RooRealL
@@ -137,10 +142,10 @@ RooMinimizer::RooMinimizer(RooAbsReal &function, Config const &cfg) : _cfg(cfg)
          _fcn = std::make_unique<RooMinimizerFcn>(&function, this);
       }
    } else {
-      if (_cfg.parallelLikelihood || _cfg.parallelGradient) { // Old test statistic with parallel likelihood or gradient
-         throw std::logic_error("In RooMinimizer constructor: Selected likelihood evaluation but an "
-                                "old-style likelihood was given. Please supply NewStyle(true) as an "
-                                "argument to createNLL for new-style likelihoods to use likelihood "
+      if (_cfg.parallelize != 0) { // Old test statistic with parallel likelihood or gradient
+         throw std::logic_error("In RooMinimizer constructor: Selected likelihood evaluation but a "
+                                "non-modular likelihood was given. Please supply ModularL(true) as an "
+                                "argument to createNLL for modular likelihoods to use likelihood "
                                 "or gradient parallelization.");
       }
       _fcn = std::make_unique<RooMinimizerFcn>(&function, this);
@@ -263,7 +268,7 @@ void RooMinimizer::setMinimizerType(std::string const &type)
 {
    _cfg.minimizerType = type.empty() ? ROOT::Math::MinimizerOptions::DefaultMinimizerType() : type;
 
-   if ((_cfg.parallelGradient || _cfg.parallelLikelihood) && _cfg.minimizerType != "Minuit2") {
+   if ((_cfg.parallelize != 0) && _cfg.minimizerType != "Minuit2") {
       std::stringstream ss;
       ss << "In RooMinimizer::setMinimizerType: only Minuit2 is supported when not using classic function mode!";
       if (type.empty()) {
@@ -305,6 +310,15 @@ bool RooMinimizer::fitFcn() const
 /// \param[in] alg  Fit algorithm to use. (Optional)
 int RooMinimizer::minimize(const char *type, const char *alg)
 {
+   if (_cfg.timingAnalysis) 
+#ifdef R__HAS_ROOFIT_MULTIPROCESS
+      addParamsToProcessTimer();
+#else
+      throw std::logic_error(
+            "ProcessTimer, but ROOT was not compiled with multiprocessing enabled, "
+            "please recompile with -Droofit_multiprocess=ON for logging with the "
+            "ProcessTimer.");
+#endif
    _fcn->Synchronize(_theFitter->Config().ParamsSettings());
 
    setMinimizerType(type);
@@ -736,6 +750,27 @@ RooPlot *RooMinimizer::contour(RooRealVar &var1, RooRealVar &var2, double n1, do
    params->assign(*paramSave);
 
    return frame;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Add parameters in metadata field to process timer
+
+void RooMinimizer::addParamsToProcessTimer()
+{
+#ifdef R__HAS_ROOFIT_MULTIPROCESS
+  // parameter indices for use in timing heat matrix
+  std::vector<std::string> parameter_names;
+  for (auto && parameter : *_fcn->GetFloatParamList()) {
+    parameter_names.push_back(parameter->GetName());
+    if (_cfg.verbose) {
+      coutI(Minimization) << "parameter name: " << parameter_names.back() << std::endl;
+    }
+  }
+  RooFit::MultiProcess::ProcessTimer::add_metadata(parameter_names);
+#else
+   coutI(Minimization) << "Not adding parameters to processtimer because multiprocessing "
+                       << "is not enabled." << std::endl;
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////

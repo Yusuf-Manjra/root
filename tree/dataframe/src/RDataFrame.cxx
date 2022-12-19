@@ -20,6 +20,8 @@
 #include "RtypesCore.h" // for ULong64_t
 #include "TTree.h"
 
+#include <fstream>           // std::ifstream
+#include <nlohmann/json.hpp> // nlohmann::json::parse
 #include <memory>  // for make_shared, allocator, shared_ptr
 #include <ostream> // ostringstream
 #include <stdexcept>
@@ -303,7 +305,7 @@ d.Foreach([] { static int i = 0; std::cout << i++ << std::endl; }); // silly exa
 ~~~
 This is useful to generate simple datasets on the fly: the contents of each event can be specified with Define() (explained below). For example, we have used this method to generate [Pythia](https://pythia.org/) events and write them to disk in parallel (with the Snapshot action).
 
-For data sources other than TTrees and TChains, RDataFrame objects are constructed using ad-hoc factory functions (see e.g. MakeCsvDataFrame(), MakeSqliteDataFrame(), MakeArrowDataFrame()):
+For data sources other than TTrees and TChains, RDataFrame objects are constructed using ad-hoc factory functions (see e.g. FromCSV(), FromSqlite(), FromArrow()):
 
 ~~~{.cpp}
 auto df = ROOT::RDF::MakeCsvDataFrame("input.csv");
@@ -1268,7 +1270,7 @@ auto h = filteredEvents.Histo1D("m");
 h->Draw();
 ~~~
 
-See also MakeNumpyDataFrame (Python-only), MakeNTupleDataFrame(), MakeArrowDataFrame(), MakeSqliteDataFrame().
+See also FromNumpy (Python-only), FromRNTuple(), FromArrow(), FromSqlite().
 
 \anchor callgraphs
 ### Computation graphs (storing and reusing sets of transformations)
@@ -1468,6 +1470,59 @@ RDataFrame::RDataFrame(ROOT::RDF::Experimental::RDatasetSpec spec)
    : RInterface(std::make_shared<RDFDetail::RLoopManager>(std::move(spec)))
 {
 }
+
+namespace RDF {
+namespace Experimental {
+
+ROOT::RDataFrame FromSpec(const std::string &jsonFile)
+{
+   const nlohmann::json fullData = nlohmann::json::parse(std::ifstream(jsonFile));
+   RDatasetSpec spec;
+
+   for (const auto &groups : fullData["groups"]) {
+      std::string tag = groups["tag"];
+      // TODO: if requested in https://github.com/root-project/root/issues/11624
+      // allow union-like types for trees and files, see: https://github.com/nlohmann/json/discussions/3815
+      std::vector<std::string> trees = groups["trees"];
+      std::vector<std::string> files = groups["files"];
+      RMetaData m;
+      for (const auto &metadata : groups["metadata"].items()) {
+         const auto &val = metadata.value();
+         if (val.is_string())
+            m.Add(metadata.key(), val.get<std::string>());
+         else if (val.is_number_integer())
+            m.Add(metadata.key(), val.get<int>());
+         else if (val.is_number_float())
+            m.Add(metadata.key(), val.get<double>());
+         else
+            throw std::logic_error("The metadata keys can only be of type [string|int|double].");
+      }
+      spec.AddGroup(RDatasetGroup{tag, trees, files, m});
+   }
+   if (fullData.contains("friends")) {
+      for (const auto &friends : fullData["friends"].items()) {
+         std::string alias = friends.key();
+         std::vector<std::string> trees = friends.value()["trees"];
+         std::vector<std::string> files = friends.value()["files"];
+         if (files.size() != trees.size() && trees.size() > 1)
+            throw std::runtime_error("Mismatch between trees and files in a friend.");
+         spec.WithGlobalFriends(trees, files, alias);
+      }
+   }
+
+   if (fullData.contains("range")) {
+      std::vector<int> range = fullData["range"];
+
+      if (range.size() == 1)
+         spec.WithGlobalRange({range[0]});
+      else if (range.size() == 2)
+         spec.WithGlobalRange({range[0], range[1]});
+   }
+   return ROOT::RDataFrame(spec);
+}
+
+} // namespace Experimental
+} // namespace RDF
 
 } // namespace ROOT
 

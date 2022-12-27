@@ -22,7 +22,9 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitXRooFit
         DEPENDENCIES
         Gui
         Ged
+        RooFitCore
         LINKDEF
         inc/LinkDef.h
         )
-target_compile_definitions(RooFitXRooFit PUBLIC XROOFIT_NAMESPACE=RooFit::Detail::XRooFit)
+
+target_include_directories(RooFitXRooFit PRIVATE inc/RooFit)

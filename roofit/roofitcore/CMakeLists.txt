@@ -139,7 +139,6 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
     RooMCStudy.h
     RooMinimizer.h
     RooMoment.h
-    RooMPSentinel.h
     RooMsgService.h
     RooMultiCategory.h
     RooMultiGenFunction.h
@@ -194,7 +193,6 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
     RooSecondMoment.h
     RooSegmentedIntegrator1D.h
     RooSegmentedIntegrator2D.h
-    RooSentinel.h
     RooSetProxy.h
     RooSharedProperties.h
     RooSimGenContext.h
@@ -227,7 +225,6 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
     RooBinWidthFunction.h
     RooFitLegacy/RooCatTypeLegacy.h
     RooFitLegacy/RooCategorySharedProperties.h
-    RooFitLegacy/RooMinuit.h
     RooFitLegacy/RooTreeData.h
     RooFit/TestStatistics/LikelihoodGradientWrapper.h
     RooFit/TestStatistics/LikelihoodWrapper.h
@@ -371,7 +368,6 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
     src/RooMinimizer.cxx
     src/RooMinimizerFcn.cxx
     src/RooMoment.cxx
-    src/RooMPSentinel.cxx
     src/RooMsgService.cxx
     src/RooMultiCategory.cxx
     src/RooMultiGenFunction.cxx
@@ -455,7 +451,6 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
     src/RooBinSamplingPdf.cxx
     src/RooBinWidthFunction.cxx
     src/RooFitLegacy/RooCatTypeLegacy.cxx
-    src/RooFitLegacy/RooMinuit.cxx
     src/RunContext.cxx
     src/TestStatistics/ConstantTermsOptimizer.cxx
     src/TestStatistics/LikelihoodGradientWrapper.cxx

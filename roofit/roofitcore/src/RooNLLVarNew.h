@@ -14,9 +14,10 @@
 #ifndef RooFit_RooNLLVarNew_h
 #define RooFit_RooNLLVarNew_h
 
-#include "RooAbsPdf.h"
-#include "RooAbsReal.h"
-#include "RooTemplateProxy.h"
+#include <RooAbsPdf.h>
+#include <RooAbsReal.h>
+#include <RooGlobalFunc.h>
+#include <RooTemplateProxy.h>
 
 #include <Math/Util.h>
 
@@ -34,7 +35,7 @@ public:
 
    RooNLLVarNew(){};
    RooNLLVarNew(const char *name, const char *title, RooAbsPdf &pdf, RooArgSet const &observables, bool isExtended,
-                bool doOffset, bool binnedL = false);
+                RooFit::OffsetMode offsetMode, bool binnedL = false);
    RooNLLVarNew(const RooNLLVarNew &other, const char *name = nullptr);
    TObject *clone(const char *newname) const override { return new RooNLLVarNew(*this, newname); }
 
@@ -76,7 +77,7 @@ private:
    RooTemplateProxy<RooAbsReal> _weightSquaredVar;
    mutable std::vector<double> _binw;                  ///<!
    mutable std::vector<double> _logProbasBuffer;       ///<!
-   mutable ROOT::Math::KahanSum<double> _offset = 0.0; ///<! Offset as KahanSum to avoid loss of precision
+   mutable ROOT::Math::KahanSum<double> _offset {0.}; ///<! Offset as KahanSum to avoid loss of precision
 
 }; // end class RooNLLVar
 

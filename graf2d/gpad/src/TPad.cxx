@@ -5651,7 +5651,7 @@ void TPad::SavePrimitive(std::ostream &out, Option_t * /*= ""*/)
    TContext ctxt(this, kFALSE); // not interactive
 
    char quote = '"';
-   char lcname[10];
+   char lcname[100];
    const char *cname = GetName();
    size_t nch = strlen(cname);
    if (nch < sizeof(lcname)) {
@@ -5684,24 +5684,17 @@ void TPad::SavePrimitive(std::ostream &out, Option_t * /*= ""*/)
    }
    out<<"   "<<cname<<"->Range("<<fX1<<","<<fY1<<","<<fX2<<","<<fY2<<");"<<std::endl;
    TView *view = GetView();
-   Double_t rmin[3], rmax[3];
    if (view) {
+      Double_t rmin[3], rmax[3];
       view->GetRange(rmin, rmax);
       static Int_t viewNumber = 0;
       out<<"   TView *view"<<++viewNumber<<" = TView::CreateView(1);"<<std::endl;
       out<<"   view"<<viewNumber<<"->SetRange("<<rmin[0]<<","<<rmin[1]<<","<<rmin[2]<<","
                                <<rmax[0]<<","<<rmax[1]<<","<<rmax[2]<<");"<<std::endl;
    }
-   if (GetFillColor() != 19) {
-      if (GetFillColor() > 228) {
-         TColor::SaveColor(out, GetFillColor());
-         out<<"   "<<cname<<"->SetFillColor(ci);" << std::endl;
-      } else
-         out<<"   "<<cname<<"->SetFillColor("<<GetFillColor()<<");"<<std::endl;
-   }
-   if (GetFillStyle() != 1001) {
-      out<<"   "<<cname<<"->SetFillStyle("<<GetFillStyle()<<");"<<std::endl;
-   }
+
+   SaveFillAttributes(out, cname, 19, 1001);
+
    if (GetBorderMode() != 1) {
       out<<"   "<<cname<<"->SetBorderMode("<<GetBorderMode()<<");"<<std::endl;
    }
@@ -5749,10 +5742,9 @@ void TPad::SavePrimitive(std::ostream &out, Option_t * /*= ""*/)
    }
 
    if (GetFrameFillColor() != GetFillColor()) {
-      if (GetFrameFillColor() > 228) {
-         TColor::SaveColor(out, GetFrameFillColor());
+      if (TColor::SaveColor(out, GetFrameFillColor()))
          out<<"   "<<cname<<"->SetFrameFillColor(ci);" << std::endl;
-      } else
+      else
          out<<"   "<<cname<<"->SetFrameFillColor("<<GetFrameFillColor()<<");"<<std::endl;
    }
    if (GetFrameFillStyle() != 1001) {
@@ -5762,10 +5754,9 @@ void TPad::SavePrimitive(std::ostream &out, Option_t * /*= ""*/)
       out<<"   "<<cname<<"->SetFrameLineStyle("<<GetFrameLineStyle()<<");"<<std::endl;
    }
    if (GetFrameLineColor() != 1) {
-      if (GetFrameLineColor() > 228) {
-         TColor::SaveColor(out, GetFrameLineColor());
+      if (TColor::SaveColor(out, GetFrameLineColor()))
          out<<"   "<<cname<<"->SetFrameLineColor(ci);" << std::endl;
-      } else
+      else
          out<<"   "<<cname<<"->SetFrameLineColor("<<GetFrameLineColor()<<");"<<std::endl;
    }
    if (GetFrameLineWidth() != 1) {
@@ -5782,10 +5773,9 @@ void TPad::SavePrimitive(std::ostream &out, Option_t * /*= ""*/)
    if (!frame) frame = (TFrame*)GetPrimitive("TFrame");
    if (frame) {
       if (frame->GetFillColor() != GetFillColor()) {
-         if (frame->GetFillColor() > 228) {
-            TColor::SaveColor(out, frame->GetFillColor());
+         if (TColor::SaveColor(out, frame->GetFillColor()))
             out<<"   "<<cname<<"->SetFrameFillColor(ci);" << std::endl;
-         } else
+         else
             out<<"   "<<cname<<"->SetFrameFillColor("<<frame->GetFillColor()<<");"<<std::endl;
       }
       if (frame->GetFillStyle() != 1001) {
@@ -5795,10 +5785,9 @@ void TPad::SavePrimitive(std::ostream &out, Option_t * /*= ""*/)
          out<<"   "<<cname<<"->SetFrameLineStyle("<<frame->GetLineStyle()<<");"<<std::endl;
       }
       if (frame->GetLineColor() != 1) {
-         if (frame->GetLineColor() > 228) {
-            TColor::SaveColor(out, frame->GetLineColor());
+         if (TColor::SaveColor(out, frame->GetLineColor()))
             out<<"   "<<cname<<"->SetFrameLineColor(ci);" << std::endl;
-         } else
+         else
             out<<"   "<<cname<<"->SetFrameLineColor("<<frame->GetLineColor()<<");"<<std::endl;
       }
       if (frame->GetLineWidth() != 1) {

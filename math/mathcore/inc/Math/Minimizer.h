@@ -25,6 +25,9 @@
 #include <string>
 #include <limits>
 #include <cmath>
+#include <vector>
+#include <functional>
+
 
 
 namespace ROOT {
@@ -122,6 +125,8 @@ public:
       SetFunction(static_cast<const ::ROOT::Math::IMultiGenFunction &> (func));
    }
 
+   /// set the function implementing Hessian computation (re-implemented by Minimizer using it)
+   virtual void SetHessianFunction(std::function<bool(const std::vector<double> &, double *)> ) {}
 
    /// add variables  . Return number of variables successfully added
    template<class VariableIterator>

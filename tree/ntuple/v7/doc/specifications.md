@@ -250,8 +250,11 @@ Every field record frame of the list of fields has the following contents
 
 The field version and type version are used for schema evolution.
 
-If the flag 0x01 (_repetitive field_) is set, the field represents a fixed sized array.
-In this case, an additional 64bit integer specifies the size of the array.
+If `flags=0x0001` (_repetitive field_) is set, the field represents a fixed-size array.
+In this case, an additional 64bit integer follows immediately that specifies the size of the array.
+Typically, another (sub) field with `Parent Field ID` equal to the ID of this field
+is expected to be found, representing the array content
+(see Section "Mapping of C++ Types to Fields and Columns").
 
 The block of integers is followed by a list of strings:
 
@@ -622,8 +625,10 @@ They are stored as two fields:
 
 #### std::array<T, N> and array type of the form T[N]
 
-Fixed-sized arrays are stored as single repetitive fields of type `T`.
-The array size `N` is stored in the field meta-data.
+Fixed-sized arrays are stored as two fields:
+  - A repetitive field of type `std::array<T, N>` with no attached columns. The array size `N` is stored in the field meta-data.
+  - Child field of type `T`, which must be a type with RNTuple I/O support.
+  
 Multi-dimensional arrays of the form `T[N][M]...` are currently not supported.
 
 #### std::variant<T1, T2, ..., Tn>

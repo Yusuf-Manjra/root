@@ -1000,7 +1000,11 @@ bool RooAbsArg::redirectServers(const RooAbsCollection& newSetOrig, bool mustRep
 {
   // Trivial case, no servers
   if (_serverList.empty()) return false ;
-  if (newSetOrig.empty()) return false ;
+
+  // We don't need to do anything if there are no new servers or if the only
+  // new server is this RooAbsArg itself. And by returning early, we avoid
+  // potentially annoying side effects of the redirectServersHook.
+  if (newSetOrig.empty() || (newSetOrig.size() == 1 && newSetOrig[0] == this)) return false ;
 
   // Strip any non-matching removal nodes from newSetOrig
   RooAbsCollection* newSet ;
@@ -1057,9 +1061,12 @@ bool RooAbsArg::redirectServers(const RooAbsCollection& newSetOrig, bool mustRep
 
     if (!newServer) {
       if (mustReplaceAll) {
-        coutE(LinkStateMgmt) << "RooAbsArg::redirectServers(" << (void*)this << "," << GetName() << "): server " << oldServer->GetName()
-                    << " (" << (void*)oldServer << ") not redirected" << (nameChange?"[nameChange]":"") << endl ;
-        ret = true ;
+        std::stringstream ss;
+        ss << "RooAbsArg::redirectServers(" << (void*)this << "," << GetName() << "): server " << oldServer->GetName()
+           << " (" << (void*)oldServer << ") not redirected" << (nameChange?"[nameChange]":"");
+        const std::string errorMsg = ss.str();
+        coutE(LinkStateMgmt) << errorMsg << std::endl;
+        throw std::runtime_error(errorMsg);
       }
       continue ;
     }

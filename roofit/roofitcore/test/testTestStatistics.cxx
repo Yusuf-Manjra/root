@@ -12,6 +12,7 @@
 #include <RooNLLVar.h>
 #include <RooRandom.h>
 #include <RooPlot.h>
+#include <RooPolyVar.h>
 #include <RooRealVar.h>
 #include <RooWorkspace.h>
 
@@ -68,7 +69,7 @@ class TestStatisticTest : public testing::TestWithParam<std::tuple<std::string>>
    {
       RooRandom::randomGenerator()->SetSeed(1337ul);
       _batchMode = std::get<0>(GetParam());
-      _changeMsgLvl = std::make_unique<RooHelpers::LocalChangeMsgLevel>(RooFit::ERROR);
+      _changeMsgLvl = std::make_unique<RooHelpers::LocalChangeMsgLevel>(RooFit::WARNING);
    }
 
    void TearDown() override { _changeMsgLvl.reset(); }
@@ -104,12 +105,13 @@ TEST_P(TestStatisticTest, IntegrateBins)
    dataS->plotOn(frame.get(), Name("data"));
 
    a.setVal(3.);
-   std::unique_ptr<RooFitResult> fit1(pdf.fitTo(*dataS, Save(), PrintLevel(-1), BatchMode(_batchMode)));
+   std::unique_ptr<RooFitResult> fit1(
+      pdf.fitTo(*dataS, Save(), PrintLevel(-1), BatchMode(_batchMode), SumW2Error(false)));
    pdf.plotOn(frame.get(), LineColor(kRed), Name("standard"));
 
    a.setVal(3.);
    std::unique_ptr<RooFitResult> fit2(
-      pdf.fitTo(*dataS, Save(), PrintLevel(-1), BatchMode(_batchMode), IntegrateBins(1.E-3)));
+      pdf.fitTo(*dataS, Save(), PrintLevel(-1), BatchMode(_batchMode), SumW2Error(false), IntegrateBins(1.E-3)));
    pdf.plotOn(frame.get(), LineColor(kBlue), Name("highRes"));
 
    EXPECT_GT(std::abs(getVal("a", targetValues) - getVal("a", fit1->floatParsFinal())),
@@ -153,12 +155,12 @@ TEST_P(TestStatisticTest, IntegrateBins_SubRange)
 
    a.setVal(3.);
    std::unique_ptr<RooFitResult> fit1(
-      pdf.fitTo(*dataS, Save(), PrintLevel(-1), Optimize(0), Range("range"), BatchMode(_batchMode)));
+      pdf.fitTo(*dataS, Save(), PrintLevel(-1), Optimize(0), Range("range"), BatchMode(_batchMode), SumW2Error(false)));
    pdf.plotOn(frame.get(), LineColor(kRed), Name("standard"), Range("range"), NormRange("range"));
 
    a.setVal(3.);
    std::unique_ptr<RooFitResult> fit2(pdf.fitTo(*dataS, Save(), PrintLevel(-1), Optimize(0), Range("range"),
-                                                BatchMode(_batchMode), IntegrateBins(1.E-3)));
+                                                BatchMode(_batchMode), SumW2Error(false), IntegrateBins(1.E-3)));
    pdf.plotOn(frame.get(), LineColor(kBlue), Name("highRes"), Range("range"), NormRange("range"));
 
    EXPECT_GT(std::abs(getVal("a", targetValues) - getVal("a", fit1->floatParsFinal())),
@@ -204,12 +206,13 @@ TEST_P(TestStatisticTest, IntegrateBins_CustomBinning)
    dataS->plotOn(frame.get(), Name("data"));
 
    a.setVal(3.);
-   std::unique_ptr<RooFitResult> fit1(pdf.fitTo(*dataS, Save(), PrintLevel(-1), BatchMode(_batchMode), Optimize(0)));
+   std::unique_ptr<RooFitResult> fit1(
+      pdf.fitTo(*dataS, Save(), PrintLevel(-1), BatchMode(_batchMode), SumW2Error(false), Optimize(0)));
    pdf.plotOn(frame.get(), LineColor(kRed), Name("standard"));
 
    a.setVal(3.);
-   std::unique_ptr<RooFitResult> fit2(
-      pdf.fitTo(*dataS, Save(), PrintLevel(-1), Optimize(0), BatchMode(_batchMode), IntegrateBins(1.E-3)));
+   std::unique_ptr<RooFitResult> fit2(pdf.fitTo(*dataS, Save(), PrintLevel(-1), Optimize(0), BatchMode(_batchMode),
+                                                SumW2Error(false), IntegrateBins(1.E-3)));
    pdf.plotOn(frame.get(), LineColor(kBlue), Name("highRes"));
 
    EXPECT_GT(std::abs(getVal("a", targetValues) - getVal("a", fit1->floatParsFinal())),
@@ -251,13 +254,13 @@ TEST_P(TestStatisticTest, IntegrateBins_RooDataHist)
    a.setVal(3.);
    // Disable IntegrateBins forcefully
    std::unique_ptr<RooFitResult> fit1(
-      pdf.fitTo(*data, Save(), PrintLevel(-1), BatchMode(_batchMode), IntegrateBins(-1.)));
+      pdf.fitTo(*data, Save(), PrintLevel(-1), BatchMode(_batchMode), SumW2Error(false), IntegrateBins(-1.)));
    pdf.plotOn(frame.get(), LineColor(kRed), Name("standard"));
 
    a.setVal(3.);
    // Auto-enable IntegrateBins for all RooDataHists.
    std::unique_ptr<RooFitResult> fit2(
-      pdf.fitTo(*data, Save(), PrintLevel(-1), BatchMode(_batchMode), IntegrateBins(0.)));
+      pdf.fitTo(*data, Save(), PrintLevel(-1), BatchMode(_batchMode), SumW2Error(false), IntegrateBins(0.)));
    pdf.plotOn(frame.get(), LineColor(kBlue), Name("highRes"));
 
    EXPECT_GT(std::abs(getVal("a", targetValues) - getVal("a", fit1->floatParsFinal())),
@@ -345,10 +348,69 @@ TEST(RooNLLVar, CopyRangedNLL)
    EXPECT_FLOAT_EQ(nllrange->getVal(), nllrangeClone->getVal());
 }
 
+/// When using the Integrate() command argument in chi2FitTo, the result should
+/// be identical to a fit without bin integration if the fit function is
+/// linear. This is a good cross check to see if the integration works.
+/// Inspired by the rf609_xychi2fit tutorial.
+TEST(RooXYChi2Var, IntegrateLinearFunction)
+{
+   using namespace RooFit;
+
+   // Make weighted XY dataset with asymmetric errors stored The StoreError()
+   // argument is essential as it makes the dataset store the error in addition
+   // to the values of the observables. If errors on one or more observables
+   // are asymmetric, one can store the asymmetric error using the
+   // StoreAsymError() argument
+   RooRealVar x("x", "x", -11, 11);
+   RooRealVar y("y", "y", -10, 200);
+   RooDataSet dxy("dxy", "dxy", {x, y}, StoreError({x, y}));
+
+   const double aTrue = 0.1;
+   const double bTrue = 10.0;
+
+   // Fill an example dataset with X,err(X),Y,err(Y) values
+   for (int i = 0; i <= 10; i++) {
+
+      // Set X value and error
+      x = -10 + 2 * i;
+      x.setError(i < 5 ? 0.5 / 1. : 1.0 / 1.);
+
+      // Set Y value and error
+      y = aTrue * x.getVal() + bTrue;
+      y.setError(std::sqrt(y.getVal()));
+
+      dxy.add({x, y});
+   }
+
+   // Make linear fit function
+   RooRealVar a("a", "a", 0.0, -10, 10);
+   RooRealVar b("b", "b", 0.0, -100, 100);
+   RooArgList coefs{b, a};
+   RooPolyVar f("f", "f", x, coefs);
+
+   RooArgSet savedValues;
+   coefs.snapshot(savedValues);
+
+   // Fit chi^2 using X and Y errors
+   std::unique_ptr<RooFitResult> fit1{f.chi2FitTo(dxy, YVar(y), Save(), PrintLevel(-1), Optimize(0))};
+
+   coefs.assign(savedValues);
+   // Alternative: fit chi^2 integrating f(x) over ranges defined by X errors,
+   // rather than taking point at center of bin
+   std::unique_ptr<RooFitResult> fit2{f.chi2FitTo(dxy, YVar(y), Integrate(true), Save(), PrintLevel(-1), Optimize(0))};
+
+   // Verify that the fit result is compatible with true values within the error
+   EXPECT_NEAR(getVal("a", fit1->floatParsFinal()), aTrue, getErr("a", fit1->floatParsFinal()));
+   EXPECT_NEAR(getVal("b", fit1->floatParsFinal()), bTrue, getErr("b", fit1->floatParsFinal()));
+
+   EXPECT_NEAR(getVal("a", fit2->floatParsFinal()), aTrue, getErr("a", fit2->floatParsFinal()));
+   EXPECT_NEAR(getVal("b", fit2->floatParsFinal()), bTrue, getErr("b", fit2->floatParsFinal()));
+}
+
 class OffsetBinTest : public testing::TestWithParam<std::tuple<std::string, bool, bool, bool>> {
    void SetUp() override
    {
-      _changeMsgLvl = std::make_unique<RooHelpers::LocalChangeMsgLevel>(RooFit::ERROR);
+      _changeMsgLvl = std::make_unique<RooHelpers::LocalChangeMsgLevel>(RooFit::WARNING);
       _batchMode = std::get<0>(GetParam());
       _binned = std::get<1>(GetParam());
       _ext = std::get<2>(GetParam());

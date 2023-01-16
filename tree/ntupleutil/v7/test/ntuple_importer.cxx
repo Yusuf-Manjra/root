@@ -1,6 +1,3 @@
-#include "gtest/gtest.h"
-
-#include <ROOT/RNTuple.hxx>
 #include <ROOT/RNTupleImporter.hxx>
 
 #include <TFile.h>
@@ -9,34 +6,14 @@
 #include <cstdio>
 #include <string>
 #include <tuple>
-#include <vector>
 #include <utility>
+#include <vector>
 
 #include "CustomStructUtil.hxx"
+#include "ntupleutil_test.hxx"
 
 using ROOT::Experimental::RNTupleImporter;
 using ROOT::Experimental::RNTupleReader;
-
-/**
- * An RAII wrapper around an open temporary file on disk. It cleans up the guarded file when the wrapper object
- * goes out of scope.
- */
-class FileRaii {
-private:
-   static constexpr bool kDebug = false; // if true, don't delete the file on destruction
-   std::string fPath;
-
-public:
-   explicit FileRaii(const std::string &path) : fPath(path) {}
-   FileRaii(const FileRaii &) = delete;
-   FileRaii &operator=(const FileRaii &) = delete;
-   ~FileRaii()
-   {
-      if (!kDebug)
-         std::remove(fPath.c_str());
-   }
-   std::string GetPath() const { return fPath; }
-};
 
 TEST(RNTupleImporter, Empty)
 {
@@ -303,6 +280,11 @@ TEST(RNTupleImporter, LeafCountArray)
    auto viewJetEta = viewJets.GetView<float>("jet_eta");
    auto viewMuons = reader->GetViewCollection("_collection1");
    auto viewMuonPt = viewMuons.GetView<float>("muon_pt");
+   auto viewProjectedNjets = reader->GetView<ROOT::Experimental::RNTupleCardinality>("njets");
+   auto viewProjectedJetPt = reader->GetView<ROOT::RVec<float>>("jet_pt");
+   auto viewProjectedJetEta = reader->GetView<ROOT::RVec<float>>("jet_eta");
+   auto viewProjectedNmuons = reader->GetView<ROOT::Experimental::RNTupleCardinality>("nmuons");
+   auto viewProjectedMuonPt = reader->GetView<ROOT::RVec<float>>("muon_pt");
 
    // Entry 0: 1 jet, 1 muon
    EXPECT_EQ(1, viewJets(0));
@@ -310,11 +292,25 @@ TEST(RNTupleImporter, LeafCountArray)
    EXPECT_FLOAT_EQ(2.0, viewJetEta(0));
    EXPECT_EQ(1, viewMuons(0));
    EXPECT_FLOAT_EQ(10.0, viewMuonPt(0));
+   EXPECT_EQ(1U, viewProjectedNjets(0));
+   EXPECT_EQ(1U, viewProjectedJetPt(0).size());
+   EXPECT_FLOAT_EQ(1.0, viewProjectedJetPt(0).at(0));
+   EXPECT_EQ(1U, viewProjectedJetEta(0).size());
+   EXPECT_FLOAT_EQ(2.0, viewProjectedJetEta(0).at(0));
+   EXPECT_EQ(1U, viewProjectedNmuons(0));
+   EXPECT_EQ(1U, viewProjectedMuonPt(0).size());
+   EXPECT_FLOAT_EQ(10.0, viewProjectedMuonPt(0).at(0));
 
    // Entry 1: 0 jets, 1 muon
    EXPECT_EQ(0, viewJets(1));
    EXPECT_EQ(1, viewMuons(1));
    EXPECT_FLOAT_EQ(11.0, viewMuonPt(1));
+   EXPECT_EQ(0U, viewProjectedNjets(1));
+   EXPECT_EQ(0U, viewProjectedJetPt(1).size());
+   EXPECT_EQ(0U, viewProjectedJetEta(1).size());
+   EXPECT_EQ(1U, viewProjectedNmuons(1));
+   EXPECT_EQ(1U, viewProjectedMuonPt(1).size());
+   EXPECT_FLOAT_EQ(11.0, viewProjectedMuonPt(1).at(0));
 
    // Entry 2: 2 jets, 1 muon
    EXPECT_EQ(2, viewJets(2));
@@ -324,6 +320,16 @@ TEST(RNTupleImporter, LeafCountArray)
    EXPECT_FLOAT_EQ(6.0, viewJetEta(2));
    EXPECT_EQ(1, viewMuons(2));
    EXPECT_FLOAT_EQ(12.0, viewMuonPt(2));
+   EXPECT_EQ(2U, viewProjectedNjets(2));
+   EXPECT_EQ(2U, viewProjectedJetPt(2).size());
+   EXPECT_FLOAT_EQ(3.0, viewProjectedJetPt(2).at(0));
+   EXPECT_FLOAT_EQ(5.0, viewProjectedJetPt(2).at(1));
+   EXPECT_EQ(2U, viewProjectedJetEta(2).size());
+   EXPECT_FLOAT_EQ(4.0, viewProjectedJetEta(2).at(0));
+   EXPECT_FLOAT_EQ(6.0, viewProjectedJetEta(2).at(1));
+   EXPECT_EQ(1U, viewProjectedNmuons(2));
+   EXPECT_EQ(1U, viewProjectedMuonPt(2).size());
+   EXPECT_FLOAT_EQ(12.0, viewProjectedMuonPt(2).at(0));
 }
 
 TEST(RNTupleImporter, STL)

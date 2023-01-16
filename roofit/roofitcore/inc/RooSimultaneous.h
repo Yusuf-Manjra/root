@@ -89,14 +89,22 @@ public:
                                  std::map<std::string, double> const& precisions,
                                  bool useCategoryNames=false);
 
+  RooAbsGenContext* autoGenContext(const RooArgSet &vars, const RooDataSet* prototype=nullptr, const RooArgSet* auxProto=nullptr,
+                  bool verbose=false, bool autoBinned=true, const char* binnedTag="") const override ;
+  RooAbsGenContext* genContext(const RooArgSet &vars, const RooDataSet *prototype=nullptr,
+                                  const RooArgSet* auxProto=nullptr, bool verbose= false) const override ;
+
 protected:
 
   void initialize(RooAbsCategoryLValue& inIndexCat, std::map<std::string,RooAbsPdf*> pdfMap) ;
 
   void selectNormalization(const RooArgSet* depSet=nullptr, bool force=false) override ;
   void selectNormalizationRange(const char* rangeName=nullptr, bool force=false) override ;
+
+  RooArgSet const& flattenedCatList() const;
+
   mutable RooSetProxy _plotCoefNormSet ;
-  const TNamed* _plotCoefNormRange ;
+  const TNamed* _plotCoefNormRange = nullptr;
 
   class CacheElem : public RooAbsCacheElement {
   public:
@@ -109,14 +117,12 @@ protected:
 
   friend class RooSimGenContext ;
   friend class RooSimSplitGenContext ;
-  RooAbsGenContext* autoGenContext(const RooArgSet &vars, const RooDataSet* prototype=nullptr, const RooArgSet* auxProto=nullptr,
-                  bool verbose=false, bool autoBinned=true, const char* binnedTag="") const override ;
-  RooAbsGenContext* genContext(const RooArgSet &vars, const RooDataSet *prototype=nullptr,
-                                  const RooArgSet* auxProto=nullptr, bool verbose= false) const override ;
 
   RooCategoryProxy _indexCat ; ///< Index category
   TList    _pdfProxyList ;     ///< List of PDF proxies (named after applicable category state)
-  Int_t    _numPdf ;           ///< Number of registered PDFs
+  Int_t    _numPdf = 0;        ///< Number of registered PDFs
+private:
+  mutable std::unique_ptr<RooArgSet> _indexCatSet ; ///<! Index category wrapped in a RooArgSet if needed internally
 
   ClassDefOverride(RooSimultaneous,3)  // Simultaneous operator p.d.f, functions like C++  'switch()' on input p.d.fs operating on index category5A
 };

@@ -549,6 +549,7 @@ public:
   void setProhibitServerRedirect(bool flag) { _prohibitServerRedirect = flag ; }
 
   void setWorkspace(RooWorkspace &ws) { _myws = &ws; }
+  inline RooWorkspace* workspace() const { return _myws; }
 
   RooAbsProxy* getProxy(Int_t index) const ;
   Int_t numProxies() const ;
@@ -718,7 +719,7 @@ private:
 
   mutable bool _prohibitServerRedirect ; //! Prohibit server redirects -- Debugging tool
 
-  mutable RooExpensiveObjectCache* _eocache{nullptr}; // Pointer to global cache manager for any expensive components created by this object
+  mutable RooExpensiveObjectCache* _eocache{nullptr}; //! Pointer to global cache manager for any expensive components created by this object
 
   mutable const TNamed * _namePtr ; //! De-duplicated name pointer. This will be equal for all objects with the same name.
   bool _isConstant ; //! Cached isConstant status
@@ -742,7 +743,7 @@ private:
   static std::stack<RooAbsArg*> _ioReadStack ; // reading stack
   /// \endcond
 
-  ClassDefOverride(RooAbsArg,8) // Abstract variable
+  ClassDefOverride(RooAbsArg,9) // Abstract variable
 };
 
 std::ostream& operator<<(std::ostream& os, const RooAbsArg &arg);

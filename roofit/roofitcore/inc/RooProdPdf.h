@@ -65,6 +65,9 @@ public:
 
   const RooArgList& pdfList() const { return _pdfList ; }
 
+  void addPdfs(RooAbsCollection const& pdfs);
+  void removePdfs(RooAbsCollection const& pdfs);
+
   Int_t getGenerator(const RooArgSet& directVars, RooArgSet &generateVars, bool staticInitOK=true) const override;
   void initGenerator(Int_t code) override ;
   void generateEvent(Int_t code) override;
@@ -95,9 +98,11 @@ public:
 
   void writeCacheToStream(std::ostream& os, RooArgSet const* nset) const;
 
-  std::unique_ptr<RooArgSet> fillNormSetForServer(RooArgSet const& normSet, RooAbsArg const& server) const override;
+  std::unique_ptr<RooAbsArg> compileForNormSet(RooArgSet const &normSet, RooFit::Detail::CompileContext & ctx) const override;
 
 private:
+
+  std::unique_ptr<RooArgSet> fillNormSetForServer(RooArgSet const& normSet, RooAbsArg const& server) const;
 
   double evaluate() const override ;
 
@@ -183,7 +188,7 @@ private:
 
 private:
 
-  void removePdfs(RooArgSet const& pdfs);
+
 
   ClassDefOverride(RooProdPdf,6) // PDF representing a product of PDFs
 };

@@ -24,6 +24,7 @@
 #include "RooAbsCache.h"
 #include "RooNameReg.h"
 #include "RooLinkedListIter.h"
+#include <RooFit/Detail/NormalizationHelpers.h>
 #include <RooStringView.h>
 
 #include <deque>
@@ -266,7 +267,9 @@ public:
 
   void addServer(RooAbsArg& server, bool valueProp=true, bool shapeProp=false, std::size_t refCount = 1);
   void addServerList(RooAbsCollection& serverList, bool valueProp=true, bool shapeProp=false) ;
-  void replaceServer(RooAbsArg& oldServer, RooAbsArg& newServer, bool valueProp, bool shapeProp) ;
+  void
+  R__SUGGEST_ALTERNATIVE("This interface is unsafe! Use RooAbsArg::redirectServers()")
+  replaceServer(RooAbsArg& oldServer, RooAbsArg& newServer, bool valueProp, bool shapeProp) ;
   void changeServer(RooAbsArg& server, bool valueProp, bool shapeProp) ;
   void removeServer(RooAbsArg& server, bool force=false) ;
   RooAbsArg *findNewServer(const RooAbsCollection &newSet, bool nameChange) const;
@@ -578,7 +581,7 @@ public:
 
   virtual void applyWeightSquared(bool flag);
 
-  virtual std::unique_ptr<RooArgSet> fillNormSetForServer(RooArgSet const& normSet, RooAbsArg const& server) const;
+  virtual std::unique_ptr<RooAbsArg> compileForNormSet(RooArgSet const &normSet, RooFit::Detail::CompileContext & ctx) const;
 
   virtual bool isCategory() const { return false; }
 

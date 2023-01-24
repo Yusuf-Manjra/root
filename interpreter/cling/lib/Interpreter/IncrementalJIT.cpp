@@ -262,8 +262,6 @@ Error RTDynamicLibrarySearchGenerator::tryToGenerate(
     JITDylibLookupFlags JDLookupFlags, const SymbolLookupSet &Symbols) {
   orc::SymbolMap NewSymbols;
 
-  bool HasGlobalPrefix = (GlobalPrefix != '\0');
-
   for (auto &KV : Symbols) {
     auto &Name = KV.first;
 
@@ -273,11 +271,10 @@ Error RTDynamicLibrarySearchGenerator::tryToGenerate(
     if (Allow && !Allow(Name))
       continue;
 
-    if (HasGlobalPrefix && (*Name).front() != GlobalPrefix)
-      continue;
+    bool StripGlobalPrefix = (GlobalPrefix != '\0' && (*Name).front() == GlobalPrefix);
 
-    std::string Tmp((*Name).data() + HasGlobalPrefix,
-                    (*Name).size() - HasGlobalPrefix);
+    std::string Tmp((*Name).data() + StripGlobalPrefix,
+                    (*Name).size() - StripGlobalPrefix);
     if (void *Addr = Dylib.getAddressOfSymbol(Tmp.c_str())) {
       NewSymbols[Name] = JITEvaluatedSymbol(
           static_cast<JITTargetAddress>(reinterpret_cast<uintptr_t>(Addr)),
@@ -483,7 +480,24 @@ void IncrementalJIT::addModule(Transaction& T) {
   ResourceTrackerSP RT = Jit->getMainJITDylib().createResourceTracker();
   m_ResourceTrackers[&T] = RT;
 
-  ThreadSafeModule TSM(T.takeModule(), SingleThreadedContext);
+  std::unique_ptr<Module> module = T.takeModule();
+
+  // Reset the sections of all functions so that they end up in the same text
+  // section. This is important for TCling on macOS to catch exceptions raised
+  // by constructors, which requires unwinding information. The addresses in
+  // the __eh_frame table are relocated against a single __text section when
+  // loading the MachO binary, which breaks if the call sites of constructors
+  // end up in a separate init section.
+  // (see clang::TargetInfo::getStaticInitSectionSpecifier())
+  for (auto &Fn : module->functions()) {
+    if (Fn.hasSection()) {
+      // dbgs() << "Resetting section '" << Fn.getSection() << "' of function "
+      //        << Fn.getName() << "\n";
+      Fn.setSection("");
+    }
+  }
+
+  ThreadSafeModule TSM(std::move(module), SingleThreadedContext);
 
   const Module *Unsafe = TSM.getModuleUnlocked();
   T.m_CompiledModule = Unsafe;
@@ -504,6 +518,10 @@ llvm::Error IncrementalJIT::removeModule(const Transaction& T) {
   m_ResourceTrackers.erase(&T);
   if (Error Err = RT->remove())
     return Err;
+  auto iMod = m_CompiledModules.find(T.m_CompiledModule);
+  if (iMod != m_CompiledModules.end())
+    m_CompiledModules.erase(iMod);
+
   return llvm::Error::success();
 }
 
@@ -550,7 +568,7 @@ IncrementalJIT::addOrReplaceDefinition(StringRef Name,
   return KnownAddr;
 }
 
-void* IncrementalJIT::getSymbolAddress(StringRef Name, bool IncludeHostSymbols) {
+void* IncrementalJIT::getSymbolAddress(StringRef Name, bool IncludeHostSymbols){
   std::unique_lock<SharedAtomicFlag> G(SkipHostProcessLookup, std::defer_lock);
   if (!IncludeHostSymbols)
     G.lock();
@@ -575,6 +593,15 @@ void* IncrementalJIT::getSymbolAddress(StringRef Name, bool IncludeHostSymbols) 
   }
 
   return jitTargetAddressToPointer<void*>(Symbol->getAddress());
+}
+
+bool IncrementalJIT::doesSymbolAlreadyExist(StringRef UnmangledName) {
+  auto Name = Jit->mangle(UnmangledName);
+  for (auto &&M: m_CompiledModules) {
+    if (M.first->getNamedValue(Name))
+      return true;
+  }
+  return false;
 }
 
 } // namespace cling

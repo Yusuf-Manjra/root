@@ -38,6 +38,7 @@
 #include "RooArgList.h"
 #include "RooBinning.h"
 #include "RooPlot.h"
+#include "RooConstVar.h"
 #include "RooCurve.h"
 #include "RooHist.h"
 #include "RooRealVar.h"
@@ -288,7 +289,8 @@ RooSpan<const double> RooAbsReal::getValues(RooBatchCompute::RunContext& evalDat
     dataSpans[evalDataItem.first] = evalDataItem.second;
   }
 
-  ROOT::Experimental::RooFitDriver driver(*this, normSet ? *normSet : RooArgSet{});
+  std::unique_ptr<RooAbsReal> clone = RooFit::Detail::compileForNormSet<RooAbsReal>(*this, normSet ? *normSet : RooArgSet{});
+  ROOT::Experimental::RooFitDriver driver(*clone);
   driver.setData(dataSpans);
   auto& results = evalData.ownedMemory[this];
   results = driver.getValues(); // the compiler should use the move assignment here
@@ -299,7 +301,8 @@ RooSpan<const double> RooAbsReal::getValues(RooBatchCompute::RunContext& evalDat
 ////////////////////////////////////////////////////////////////////////////////
 
 std::vector<double> RooAbsReal::getValues(RooAbsData const& data, RooFit::BatchModeOption batchMode) const {
-  ROOT::Experimental::RooFitDriver driver(*this, *data.get(), batchMode);
+  std::unique_ptr<RooAbsReal> clone = RooFit::Detail::compileForNormSet<RooAbsReal>(*this, *data.get());
+  ROOT::Experimental::RooFitDriver driver(*clone, batchMode);
   driver.setData(data, "");
   return driver.getValues();
 }
@@ -4890,3 +4893,6 @@ void RooAbsReal::enableOffsetting(bool flag)
     }
   }
 }
+
+
+RooAbsReal::Ref::Ref(double val) : _ref{RooFit::RooConst(val)} {}

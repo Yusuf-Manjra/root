@@ -110,18 +110,13 @@ RooGenProdProj::RooGenProdProj(const RooGenProdProj& other, const char* name) :
   _compSetD("compSetD","Set of integral components owned by denominator",this),
   _intList("intList","List of integrals",this)
 {
-  // Explicitly remove all server links at this point
-  for(RooAbsArg * server : servers()) {
-    removeServer(*server,true) ;
-  }
-
   // Copy constructor
   _compSetOwnedN = new RooArgSet;
   other._compSetN.snapshot(*_compSetOwnedN);
   _compSetN.add(*_compSetOwnedN) ;
 
   _compSetOwnedD = new RooArgSet;
-  other._compSetD.snapshot(*_compSetOwnedN);
+  other._compSetD.snapshot(*_compSetOwnedD);
   _compSetD.add(*_compSetOwnedD) ;
 
   for (RooAbsArg * arg : *_compSetOwnedN) {

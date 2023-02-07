@@ -241,6 +241,39 @@ TEST(RNTuple, UInt16_t)
    ASSERT_EQ("std::uint16_t", RFieldBase::Create("myUShort", "UShort_t").Unwrap()->GetType());
 }
 
+TEST(RNTuple, Double)
+{
+   FileRaii fileGuard("double.root");
+
+   auto model = RNTupleModel::Create();
+
+   auto f1 = std::make_unique<RField<double>>("d1");
+   f1->SetColumnRepresentative({ROOT::Experimental::EColumnType::kReal64});
+   model->AddField(std::move(f1));
+
+   auto f2 = std::make_unique<RField<double>>("d2");
+   f2->SetColumnRepresentative({ROOT::Experimental::EColumnType::kSplitReal64});
+   model->AddField(std::move(f2));
+
+   {
+      auto writer = RNTupleWriter::Recreate(std::move(model), "ntuple", fileGuard.GetPath());
+      auto e = writer->CreateEntry();
+      *e->Get<double>("d1") = 1.0;
+      *e->Get<double>("d2") = 2.0;
+      writer->Fill(*e);
+   }
+
+   auto reader = RNTupleReader::Open("ntuple", fileGuard.GetPath());
+   const auto *desc = reader->GetDescriptor();
+   EXPECT_EQ(ROOT::Experimental::EColumnType::kReal64,
+             (*desc->GetColumnIterable(desc->FindFieldId("d1")).begin()).GetModel().GetType());
+   EXPECT_EQ(ROOT::Experimental::EColumnType::kSplitReal64,
+             (*desc->GetColumnIterable(desc->FindFieldId("d2")).begin()).GetModel().GetType());
+   reader->LoadEntry(0);
+   EXPECT_DOUBLE_EQ(1.0, *reader->GetModel()->GetDefaultEntry()->Get<double>("d1"));
+   EXPECT_DOUBLE_EQ(2.0, *reader->GetModel()->GetDefaultEntry()->Get<double>("d2"));
+}
+
 TEST(RNTuple, UnsupportedStdTypes)
 {
    try {
@@ -262,9 +295,29 @@ TEST(RNTuple, Casting)
    FileRaii fileGuard("test_ntuple_casting.root");
    auto modelA = RNTupleModel::Create();
    modelA->MakeField<std::int32_t>("myInt", 42);
+   auto fld = ROOT::Experimental::Detail::RFieldBase::Create("field", "float").Unwrap();
+   fld->SetColumnRepresentative({EColumnType::kReal32});
+   try {
+      fld->SetColumnRepresentative({EColumnType::kBit});
+   } catch (const RException &err) {
+      EXPECT_THAT(err.what(), testing::HasSubstr("invalid column representative"));
+   }
+   modelA->AddField(std::move(fld));
    {
       auto writer = RNTupleWriter::Recreate(std::move(modelA), "ntuple", fileGuard.GetPath());
       writer->Fill();
+   }
+
+   try {
+      auto model = RNTupleModel::Create();
+      auto f = ROOT::Experimental::Detail::RFieldBase::Create("myInt", "std::int32_t").Unwrap();
+      f->SetColumnRepresentative({EColumnType::kInt32});
+      model->AddField(std::move(f));
+      auto reader = RNTupleReader::Open(std::move(model), "ntuple", fileGuard.GetPath());
+      FAIL() << "should not be able fix column representation when model is connected to a page source";
+   } catch (const RException &err) {
+      EXPECT_THAT(err.what(),
+                  testing::HasSubstr("fixed column representative only valid when connecting to a page sink"));
    }
 
    try {
@@ -273,7 +326,8 @@ TEST(RNTuple, Casting)
       auto reader = RNTupleReader::Open(std::move(modelB), "ntuple", fileGuard.GetPath());
       FAIL() << "should not be able to cast int to float";
    } catch (const RException& err) {
-      EXPECT_THAT(err.what(), testing::HasSubstr("not convertible to the requested type"));
+      EXPECT_THAT(err.what(), testing::HasSubstr("On-disk column types"));
+      EXPECT_THAT(err.what(), testing::HasSubstr("cannot be matched"));
    }
 
    auto modelC = RNTupleModel::Create();
@@ -333,7 +387,7 @@ TEST(RNTuple, TClass)
          auto viewKlass = ntuple->GetView<DerivedA>("klass");
          FAIL() << "GetView<a_base_class_of_T> should throw";
       } catch (const RException& err) {
-         EXPECT_THAT(err.what(), testing::HasSubstr("Column missing: column #0 for field a"));
+         EXPECT_THAT(err.what(), testing::HasSubstr("No on-disk column information for for field `klass.:_0.a`"));
       }
    }
 }
@@ -659,4 +713,20 @@ TEST(RNTuple, TClassReadRules)
       EXPECT_EQ(viewKlass(i).a + viewKlass(i).b, viewKlass(i).c);
       EXPECT_EQ("ROOT", viewKlass(i).s.str);
    }
+}
+
+TEST(RNTuple, RColumnRepresentations)
+{
+   using RColumnRepresentations = ROOT::Experimental::Detail::RFieldBase::RColumnRepresentations;
+   RColumnRepresentations colReps1;
+   EXPECT_EQ(RFieldBase::ColumnRepresentation_t(), colReps1.GetSerializationDefault());
+   EXPECT_EQ(RColumnRepresentations::TypesList_t{RFieldBase::ColumnRepresentation_t()},
+             colReps1.GetDeserializationTypes());
+
+   RColumnRepresentations colReps2({{EColumnType::kReal64}, {EColumnType::kSplitReal64}},
+                                   {{EColumnType::kReal32}, {EColumnType::kReal16}});
+   EXPECT_EQ(RFieldBase::ColumnRepresentation_t({EColumnType::kReal64}), colReps2.GetSerializationDefault());
+   EXPECT_EQ(RColumnRepresentations::TypesList_t(
+                {{EColumnType::kReal64}, {EColumnType::kSplitReal64}, {EColumnType::kReal32}, {EColumnType::kReal16}}),
+             colReps2.GetDeserializationTypes());
 }

@@ -27,6 +27,7 @@ functions used in D mixing have been hand coded for increased execution speed.
 **/
 
 #include "Riostream.h"
+#include "RooBatchCompute.h"
 #include "RooTruthModel.h"
 #include "RooGenContext.h"
 #include "RooAbsAnaConvPdf.h"
@@ -78,30 +79,34 @@ RooTruthModel::~RooTruthModel()
 
 Int_t RooTruthModel::basisCode(const char* name) const
 {
-  // Check for optimized basis functions
-  if (!TString("exp(-@0/@1)").CompareTo(name)) return expBasisPlus ;
-  if (!TString("exp(@0/@1)").CompareTo(name)) return expBasisMinus ;
-  if (!TString("exp(-abs(@0)/@1)").CompareTo(name)) return expBasisSum ;
-  if (!TString("exp(-@0/@1)*sin(@0*@2)").CompareTo(name)) return sinBasisPlus ;
-  if (!TString("exp(@0/@1)*sin(@0*@2)").CompareTo(name)) return sinBasisMinus ;
-  if (!TString("exp(-abs(@0)/@1)*sin(@0*@2)").CompareTo(name)) return sinBasisSum ;
-  if (!TString("exp(-@0/@1)*cos(@0*@2)").CompareTo(name)) return cosBasisPlus ;
-  if (!TString("exp(@0/@1)*cos(@0*@2)").CompareTo(name)) return cosBasisMinus ;
-  if (!TString("exp(-abs(@0)/@1)*cos(@0*@2)").CompareTo(name)) return cosBasisSum ;
-  if (!TString("(@0/@1)*exp(-@0/@1)").CompareTo(name)) return linBasisPlus ;
-  if (!TString("(@0/@1)*(@0/@1)*exp(-@0/@1)").CompareTo(name)) return quadBasisPlus ;
-  if (!TString("exp(-@0/@1)*cosh(@0*@2/2)").CompareTo(name)) return coshBasisPlus;
-  if (!TString("exp(@0/@1)*cosh(@0*@2/2)").CompareTo(name)) return coshBasisMinus;
-  if (!TString("exp(-abs(@0)/@1)*cosh(@0*@2/2)").CompareTo(name)) return coshBasisSum;
-  if (!TString("exp(-@0/@1)*sinh(@0*@2/2)").CompareTo(name)) return sinhBasisPlus;
-  if (!TString("exp(@0/@1)*sinh(@0*@2/2)").CompareTo(name)) return sinhBasisMinus;
-  if (!TString("exp(-abs(@0)/@1)*sinh(@0*@2/2)").CompareTo(name)) return sinhBasisSum;
+   std::string str = name;
 
-  // Truth model is delta function, i.e. convolution integral
-  // is basis function, therefore we can handle any basis function
-  return genericBasis ;
+   // Remove whitespaces from the input string
+   str.erase(remove(str.begin(),str.end(),' '),str.end());
+
+   // Check for optimized basis functions
+   if (str == "exp(-@0/@1)") return expBasisPlus ;
+   if (str == "exp(@0/@1)") return expBasisMinus ;
+   if (str == "exp(-abs(@0)/@1)") return expBasisSum ;
+   if (str == "exp(-@0/@1)*sin(@0*@2)") return sinBasisPlus ;
+   if (str == "exp(@0/@1)*sin(@0*@2)") return sinBasisMinus ;
+   if (str == "exp(-abs(@0)/@1)*sin(@0*@2)") return sinBasisSum ;
+   if (str == "exp(-@0/@1)*cos(@0*@2)") return cosBasisPlus ;
+   if (str == "exp(@0/@1)*cos(@0*@2)") return cosBasisMinus ;
+   if (str == "exp(-abs(@0)/@1)*cos(@0*@2)") return cosBasisSum ;
+   if (str == "(@0/@1)*exp(-@0/@1)") return linBasisPlus ;
+   if (str == "(@0/@1)*(@0/@1)*exp(-@0/@1)") return quadBasisPlus ;
+   if (str == "exp(-@0/@1)*cosh(@0*@2/2)") return coshBasisPlus;
+   if (str == "exp(@0/@1)*cosh(@0*@2/2)") return coshBasisMinus;
+   if (str == "exp(-abs(@0)/@1)*cosh(@0*@2/2)") return coshBasisSum;
+   if (str == "exp(-@0/@1)*sinh(@0*@2/2)") return sinhBasisPlus;
+   if (str == "exp(@0/@1)*sinh(@0*@2/2)") return sinhBasisMinus;
+   if (str == "exp(-abs(@0)/@1)*sinh(@0*@2/2)") return sinhBasisSum;
+
+   // Truth model is delta function, i.e. convolution integral is basis
+   // function, therefore we can handle any basis function
+   return genericBasis ;
 }
-
 
 
 
@@ -110,25 +115,40 @@ Int_t RooTruthModel::basisCode(const char* name) const
 
 void RooTruthModel::changeBasis(RooFormulaVar* inBasis)
 {
-  // Process change basis function. Since we actually
-  // evaluate the basis function object, we need to
-  // adjust our client-server links to the basis function here
+   // Remove client-server link to old basis
+   if (_basis) {
+      if (_basisCode == genericBasis) {
+         // In the case of a generic basis, we evaluate it directly, so the
+         // basis was a direct server.
+         removeServer(*_basis);
+      } else {
+         for (RooAbsArg *basisServer : _basis->servers()) {
+            removeServer(*basisServer);
+         }
+      }
 
-  // Remove client-server link to old basis
-  if (_basis) {
-    removeServer(*_basis) ;
-  }
+      if (_ownBasis) {
+         delete _basis;
+      }
+   }
+   _ownBasis = false;
 
-  // Change basis pointer and update client-server link
-  _basis = inBasis ;
-  if (_basis) {
-    addServer(*_basis,true,false) ;
-  }
+   _basisCode = inBasis ? basisCode(inBasis->GetTitle()) : 0;
 
-  _basisCode = inBasis?basisCode(inBasis->GetTitle()):0 ;
+   // Change basis pointer and update client-server link
+   _basis = inBasis;
+   if (_basis) {
+      if (_basisCode == genericBasis) {
+         // Since we actually evaluate the basis function object, we need to
+         // adjust our client-server links to the basis function here
+         addServer(*_basis, true, false);
+      } else {
+         for (RooAbsArg *basisServer : _basis->servers()) {
+            addServer(*basisServer, true, false);
+         }
+      }
+   }
 }
-
-
 
 
 
@@ -196,6 +216,76 @@ double RooTruthModel::evaluate() const
   return 0 ;
 }
 
+
+void RooTruthModel::computeBatch(cudaStream_t *stream, double *output, size_t nEvents,
+                                 RooFit::Detail::DataMap const &dataMap) const
+{
+   auto dispatch = stream ? RooBatchCompute::dispatchCUDA : RooBatchCompute::dispatchCPU;
+
+   auto xVals = dataMap.at(x);
+
+   // No basis: delta function
+   if (_basisCode == noBasis) {
+      dispatch->compute(stream, RooBatchCompute::DeltaFunction, output, nEvents, {xVals});
+      return;
+   }
+
+   // Generic basis: evaluate basis function object
+   if (_basisCode == genericBasis) {
+      dispatch->compute(stream, RooBatchCompute::Identity, output, nEvents, {dataMap.at(&basis())});
+      return;
+   }
+
+   // Precompiled basis functions
+   const BasisType basisType = static_cast<BasisType>((_basisCode == 0) ? 0 : (_basisCode / 10) + 1);
+
+   // Cast the int from the enum to double because we can only pass doubles to
+   // RooBatchCompute at this point.
+   const double basisSign = static_cast<double>((BasisSign)(_basisCode - 10 * (basisType - 1) - 2));
+
+   auto param1 = static_cast<RooAbsReal const *>(basis().getParameter(1));
+   auto param2 = static_cast<RooAbsReal const *>(basis().getParameter(2));
+   auto param1Vals = param1 ? dataMap.at(param1) : RooSpan<const double>{};
+   auto param2Vals = param2 ? dataMap.at(param2) : RooSpan<const double>{};
+
+   // Return desired basis function
+   switch (basisType) {
+   case expBasis: {
+      dispatch->compute(stream, RooBatchCompute::TruthModelExpBasis, output, nEvents, {xVals, param1Vals}, {basisSign});
+      break;
+   }
+   case sinBasis: {
+      dispatch->compute(stream, RooBatchCompute::TruthModelSinBasis, output, nEvents, {xVals, param1Vals, param2Vals},
+                        {basisSign});
+      break;
+   }
+   case cosBasis: {
+      dispatch->compute(stream, RooBatchCompute::TruthModelCosBasis, output, nEvents, {xVals, param1Vals, param2Vals},
+                        {basisSign});
+      break;
+   }
+   case linBasis: {
+      dispatch->compute(stream, RooBatchCompute::TruthModelLinBasis, output, nEvents, {xVals, param1Vals}, {basisSign});
+      break;
+   }
+   case quadBasis: {
+      dispatch->compute(stream, RooBatchCompute::TruthModelQuadBasis, output, nEvents, {xVals, param1Vals},
+                        {basisSign});
+      break;
+   }
+   case sinhBasis: {
+      dispatch->compute(stream, RooBatchCompute::TruthModelSinhBasis, output, nEvents, {xVals, param1Vals, param2Vals},
+                        {basisSign});
+      break;
+   }
+   case coshBasis: {
+      dispatch->compute(stream, RooBatchCompute::TruthModelCoshBasis, output, nEvents, {xVals, param1Vals, param2Vals},
+                        {basisSign});
+      break;
+   }
+   default: R__ASSERT(0);
+   }
+}
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -339,9 +429,8 @@ RooAbsGenContext* RooTruthModel::modelGenContext
 (const RooAbsAnaConvPdf& convPdf, const RooArgSet &vars, const RooDataSet *prototype,
  const RooArgSet* auxProto, bool verbose) const
 {
-  RooArgSet forceDirect(convVar()) ;
-  return new RooGenContext(dynamic_cast<const RooAbsPdf&>(convPdf), vars, prototype,
-                           auxProto, verbose, &forceDirect) ;
+   RooArgSet forceDirect(convVar()) ;
+   return new RooGenContext(convPdf, vars, prototype, auxProto, verbose, &forceDirect);
 }
 
 

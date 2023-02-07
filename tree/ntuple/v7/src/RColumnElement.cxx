@@ -23,13 +23,16 @@
 #include <memory>
 #include <utility>
 
+template <>
 std::unique_ptr<ROOT::Experimental::Detail::RColumnElementBase>
-ROOT::Experimental::Detail::RColumnElementBase::Generate(EColumnType type) {
+ROOT::Experimental::Detail::RColumnElementBase::Generate<void>(EColumnType type)
+{
    switch (type) {
    case EColumnType::kReal32:
       return std::make_unique<RColumnElement<float, EColumnType::kReal32>>(nullptr);
    case EColumnType::kReal64:
       return std::make_unique<RColumnElement<double, EColumnType::kReal64>>(nullptr);
+   case EColumnType::kSplitReal64: return std::make_unique<RColumnElement<double, EColumnType::kSplitReal64>>(nullptr);
    case EColumnType::kChar:
       return std::make_unique<RColumnElement<char, EColumnType::kChar>>(nullptr);
    case EColumnType::kByte:
@@ -55,12 +58,16 @@ ROOT::Experimental::Detail::RColumnElementBase::Generate(EColumnType type) {
    return nullptr;
 }
 
+template std::unique_ptr<ROOT::Experimental::Detail::RColumnElementBase>
+ROOT::Experimental::Detail::RColumnElementBase::Generate<void>(EColumnType type);
+
 std::size_t ROOT::Experimental::Detail::RColumnElementBase::GetBitsOnStorage(EColumnType type) {
    switch (type) {
    case EColumnType::kReal32:
       return 32;
    case EColumnType::kReal64:
       return 64;
+   case EColumnType::kSplitReal64: return 64;
    case EColumnType::kChar:
       return 8;
    case EColumnType::kByte:
@@ -92,6 +99,7 @@ std::string ROOT::Experimental::Detail::RColumnElementBase::GetTypeName(EColumnT
       return "Real32";
    case EColumnType::kReal64:
       return "Real64";
+   case EColumnType::kSplitReal64: return "SplitReal64";
    case EColumnType::kChar:
       return "Char";
    case EColumnType::kByte:

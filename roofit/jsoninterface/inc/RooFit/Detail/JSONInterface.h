@@ -83,15 +83,6 @@ public:
    virtual JSONNode &operator<<(std::string const &s) = 0;
    virtual JSONNode &operator<<(int i) = 0;
    virtual JSONNode &operator<<(double d) = 0;
-   template <class T>
-   JSONNode &operator<<(const std::vector<T> &v)
-   {
-      this->set_seq();
-      for (const auto &e : v) {
-         this->append_child() << e;
-      };
-      return *this;
-   }
    virtual const JSONNode &operator>>(std::string &v) const = 0;
    virtual JSONNode &operator[](std::string const &k) = 0;
    virtual JSONNode &operator[](size_t pos) = 0;
@@ -106,7 +97,7 @@ public:
    virtual std::string key() const = 0;
    virtual std::string val() const = 0;
    virtual int val_int() const { return atoi(this->val().c_str()); }
-   virtual float val_float() const { return atof(this->val().c_str()); }
+   virtual double val_double() const { return std::stod(this->val()); }
    virtual bool val_bool() const { return atoi(this->val().c_str()); }
    template <class T>
    T val_t() const;
@@ -123,6 +114,24 @@ public:
    virtual const_children_view children() const;
    virtual JSONNode &child(size_t pos) = 0;
    virtual const JSONNode &child(size_t pos) const = 0;
+
+   template <typename Collection>
+   void fill_seq(Collection const &coll)
+   {
+      set_seq();
+      for (auto const &item : coll) {
+         append_child() << item;
+      }
+   }
+
+   template <typename Collection, typename TransformationFunc>
+   void fill_seq(Collection const &coll, TransformationFunc func)
+   {
+      set_seq();
+      for (auto const &item : coll) {
+         append_child() << func(item);
+      }
+   }
 };
 
 class JSONTree {
@@ -133,6 +142,17 @@ public:
 
    static std::unique_ptr<JSONTree> create();
    static std::unique_ptr<JSONTree> create(std::istream &is);
+
+   static std::string getBackend();
+   static void setBackend(std::string const &name);
+
+   static bool hasBackend(std::string const &name);
+
+private:
+   // Internally, we store the backend type with an enum to be more memory efficient.
+   enum class Backend { NlohmannJson, Ryml };
+
+   static Backend &getBackendEnum();
 };
 
 std::ostream &operator<<(std::ostream &os, RooFit::Detail::JSONNode const &s);

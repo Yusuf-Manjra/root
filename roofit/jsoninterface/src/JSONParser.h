@@ -59,7 +59,7 @@ public:
       std::string key() const override;
       std::string val() const override;
       int val_int() const override;
-      float val_float() const override;
+      double val_double() const override;
       bool val_bool() const override;
       bool has_key() const override;
       bool has_val() const override;
@@ -80,7 +80,7 @@ protected:
 
 public:
    TJSONTree();
-   virtual ~TJSONTree();
+   ~TJSONTree() override;
    TJSONTree(std::istream &is);
    TJSONTree::Node &incache(const TJSONTree::Node &n);
 

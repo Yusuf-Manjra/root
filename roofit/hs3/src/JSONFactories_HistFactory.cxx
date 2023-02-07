@@ -82,8 +82,8 @@ inline void stackError(const JSONNode &n, std::vector<double> &sumW, std::vector
    }
    const size_t nbins = n["counts"].num_children();
    for (size_t ibin = 0; ibin < nbins; ++ibin) {
-      double w = n["counts"][ibin].val_float();
-      double e = n["errors"][ibin].val_float();
+      double w = n["counts"][ibin].val_double();
+      double e = n["errors"][ibin].val_double();
       if (ibin < sumW.size())
          sumW[ibin] += w;
       else
@@ -246,8 +246,8 @@ bool importHistSample(RooWorkspace &ws, Scope const &scope, const JSONNode &p)
                                                            : "alpha_" + sysname);
             if (RooRealVar *par = ::getNP(ws, parname.c_str())) {
                nps.add(*par);
-               low.push_back(sys["low"].val_float());
-               high.push_back(sys["high"].val_float());
+               low.push_back(sys["low"].val_double());
+               high.push_back(sys["high"].val_double());
             } else {
                RooJSONFactoryWSTool::error("overall systematic '" + sysname + "' doesn't have a valid parameter!");
             }
@@ -428,7 +428,7 @@ public:
       std::string sysname(RooJSONFactoryWSTool::name(p));
       std::vector<double> vals;
       for (const auto &v : p["vals"].children()) {
-         vals.push_back(v.val_float());
+         vals.push_back(v.val_double());
       }
       RooArgList gammas;
       return createPHF(sysname, phfname, vals, w, constraints, observables, p["constraint"].val(), gammas, 0, 1000);
@@ -453,7 +453,7 @@ public:
       if (p.has_child("statError")) {
          auto &staterr = p["statError"];
          if (staterr.has_child("relThreshold"))
-            statErrorThreshold = staterr["relThreshold"].val_float();
+            statErrorThreshold = staterr["relThreshold"].val_double();
          if (staterr.has_child("constraint"))
             statErrorType = staterr["constraint"].val();
       }
@@ -560,18 +560,13 @@ public:
    }
    bool exportObject(RooJSONFactoryWSTool *, const RooAbsArg *func, JSONNode &elem) const override
    {
-      const RooStats::HistFactory::FlexibleInterpVar *fip =
-         static_cast<const RooStats::HistFactory::FlexibleInterpVar *>(func);
+      auto fip = static_cast<const RooStats::HistFactory::FlexibleInterpVar *>(func);
       elem["type"] << key();
-      auto &vars = elem["vars"];
-      elem["interpolationCodes"] << fip->interpolationCodes();
-      vars.set_seq();
-      for (const auto &v : fip->variables()) {
-         vars.append_child() << v->GetName();
-      }
+      elem["vars"].fill_seq(fip->variables(), [](auto const &item) { return item->GetName(); });
+      elem["interpolationCodes"].fill_seq(fip->interpolationCodes());
       elem["nom"] << fip->nominal();
-      elem["high"] << fip->high();
-      elem["low"] << fip->low();
+      elem["high"].fill_seq(fip->high());
+      elem["low"].fill_seq(fip->low());
       return true;
    }
 };
@@ -587,27 +582,13 @@ public:
    {
       const PiecewiseInterpolation *pip = static_cast<const PiecewiseInterpolation *>(func);
       elem["type"] << key();
-      elem["interpolationCodes"] << pip->interpolationCodes();
-      auto &vars = elem["vars"];
-      vars.set_seq();
-      for (const auto &v : pip->paramList()) {
-         vars.append_child() << v->GetName();
-      }
-
+      elem["interpolationCodes"].fill_seq(pip->interpolationCodes());
+      elem["vars"].fill_seq(pip->paramList(), [](auto const &item) { return item->GetName(); });
       auto &nom = elem["nom"];
       nom << pip->nominalHist()->GetName();
 
-      auto &high = elem["high"];
-      high.set_seq();
-      for (const auto &v : pip->highList()) {
-         high.append_child() << v->GetName();
-      }
-
-      auto &low = elem["low"];
-      low.set_seq();
-      for (const auto &v : pip->lowList()) {
-         low.append_child() << v->GetName();
-      }
+      elem["high"].fill_seq(pip->highList(), [](auto const &item) { return item->GetName(); });
+      elem["low"].fill_seq(pip->lowList(), [](auto const &item) { return item->GetName(); });
       return true;
    }
 };
@@ -687,7 +668,7 @@ public:
          RooJSONFactoryWSTool::error("no nominal variation of '" + name + "'");
       }
 
-      double nom(p["nom"].val_float());
+      double nom(p["nom"].val_double());
 
       RooArgList vars;
       for (const auto &d : p["vars"].children()) {
@@ -823,11 +804,7 @@ public:
          auto &s = samples[samplename];
          s.set_map();
 
-         for (const auto &norm : norms) {
-            auto &nfs = s["normFactors"];
-            nfs.set_seq();
-            nfs.append_child() << norm->GetName();
-         }
+         s["normFactors"].fill_seq(norms, [](auto const &item) { return item->GetName(); });
 
          if (pip) {
             auto &systs = s["histogramSystematics"];
@@ -978,8 +955,7 @@ public:
    }
 };
 
-STATIC_EXECUTE(
-
+STATIC_EXECUTE([]() {
    using namespace RooFit::JSONIO;
 
    registerImporter<RooRealSumPdfFactory>("histfactory", true);
@@ -988,7 +964,6 @@ STATIC_EXECUTE(
    registerExporter<FlexibleInterpVarStreamer>(RooStats::HistFactory::FlexibleInterpVar::Class(), true);
    registerExporter<PiecewiseInterpolationStreamer>(PiecewiseInterpolation::Class(), true);
    registerExporter<HistFactoryStreamer>(RooProdPdf::Class(), true);
-
-)
+});
 
 } // namespace

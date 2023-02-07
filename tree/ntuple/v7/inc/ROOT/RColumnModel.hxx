@@ -31,6 +31,13 @@ namespace Experimental {
 
 More complex types, such as classes, get translated into columns of such simple types by the RField.
 New types need to be accounted for in RColumnElementBase::Generate() and RColumnElementBase::GetBitsOnStorage(), too.
+When changed, remember to update
+  - RColumnElement::Generate()
+  - RColumnElement::GetBitsOnStorage()
+  - RColumnElement::GetTypeName()
+  - RColumnElement template specializations / packing & unpacking
+  - If necessary, endianess handling for the packing + unit test in ntuple_endian
+  - RNTupleSerializer::[Des|S]erializeColumnType
 */
 // clang-format on
 enum class EColumnType {
@@ -44,6 +51,7 @@ enum class EColumnType {
    kChar,
    kBit,
    kReal64,
+   kSplitReal64,
    kReal32,
    kReal16,
    kInt64,
@@ -57,7 +65,7 @@ enum class EColumnType {
 /**
 \class ROOT::Experimental::RColumnModel
 \ingroup NTuple
-\brief Holds the static meta-data of a column in a tree
+\brief Holds the static meta-data of an RNTuple column
 */
 // clang-format on
 class RColumnModel {
@@ -67,6 +75,7 @@ private:
 
 public:
    RColumnModel() : fType(EColumnType::kUnknown), fIsSorted(false) {}
+   explicit RColumnModel(EColumnType type) : fType(type), fIsSorted(type == EColumnType::kIndex) {}
    RColumnModel(EColumnType type, bool isSorted) : fType(type), fIsSorted(isSorted) {}
 
    EColumnType GetType() const { return fType; }

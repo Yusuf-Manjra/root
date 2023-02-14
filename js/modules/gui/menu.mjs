@@ -1,4 +1,4 @@
-import { loadScript, source_dir, settings, gStyle, internals, isObject, isFunc, isStr, clTGaxis } from '../core.mjs';
+import { settings, gStyle, isBatchMode, isObject, isFunc, isStr, clTGaxis } from '../core.mjs';
 import { rgb as d3_rgb, select as d3_select } from '../d3.mjs';
 import { injectStyle, selectgStyle, saveSettings, readSettings, saveStyle, getColorExec } from './utils.mjs';
 import { getColor } from '../base/colors.mjs';
@@ -92,7 +92,8 @@ class JSRootMenu {
       }
 
       if (!without_sub) this.add('sub:' + top_name, () => {
-         this.input('Provide draw option', opts[0], 'text').then(call_back);
+         let opt = isFunc(this.painter?.getDrawOpt) ? this.painter.getDrawOpt() : opts[0];
+         this.input('Provide draw option', opt, 'text').then(call_back);
       });
 
       for (let i = 0; i < opts.length; ++i) {
@@ -1311,5 +1312,24 @@ function closeMenu(menuname) {
    return false;
 }
 
-export { createMenu, closeMenu };
+/** @summary Fill and show context menu for painter object
+  * @private */
+function showPainterMenu(evnt, painter, kind) {
+   evnt.stopPropagation(); // disable main context menu
+   evnt.preventDefault();  // disable browser context menu
+
+   createMenu(evnt, painter).then(menu => {
+      painter.fillContextMenu(menu);
+      return painter.fillObjectExecMenu(menu, kind);
+   }).then(menu => menu.show());
+}
+
+/** @summary Assign handler for context menu for painter draw element
+  * @private */
+function assignContextMenu(painter, kind) {
+   if (!isBatchMode() && painter?.draw_g)
+      painter.draw_g.on('contextmenu', settings.ContextMenu ? evnt => showPainterMenu(evnt, painter, kind) : null);
+}
+
+export { createMenu, closeMenu, showPainterMenu, assignContextMenu };
 

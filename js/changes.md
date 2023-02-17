@@ -8,6 +8,8 @@
 5. Fix several issues with axis reverse order
 6. Implement reverse axis on lego plots
 7. Add interactivity (moving, context menu) for TLine, TBox, TText, TLatex
+8. Support more kinds of log scales - ln and logN where N is any positive integer
+9. Use new gStyle attributes for candle and violin plots
 
 
 ## Changes in 7.3.0

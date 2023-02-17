@@ -139,6 +139,12 @@ private:
    /// Free text set by the user
    std::string fDescription;
 
+   void InvokeReadCallbacks(RFieldValue &value)
+   {
+      for (const auto &func : fReadCallbacks)
+         func(value);
+   }
+
 protected:
    /// Collections and classes own sub fields
    std::vector<std::unique_ptr<RFieldBase>> fSubFields;
@@ -193,13 +199,6 @@ protected:
    /// Called by `ConnectPageSource()` only once connected; derived classes may override this
    /// as appropriate
    virtual void OnConnectPageSource() {}
-
-private:
-   void InvokeReadCallbacks(RFieldValue &value)
-   {
-      for (const auto &func : fReadCallbacks)
-         func(value);
-   }
 
 public:
    /// Iterates over the sub tree of fields in depth-first search order
@@ -345,6 +344,8 @@ public:
    /// Otherwise, or if the provided representation is not in the list of GetColumnRepresentations,
    /// an exception is thrown
    void SetColumnRepresentative(const ColumnRepresentation_t &representative);
+   /// Whether or not an explicit column representative was set
+   bool HasDefaultColumnRepresentative() const { return fColumnRepresentative == nullptr; }
 
    /// Fields and their columns live in the void until connected to a physical page storage.  Only once connected, data
    /// can be read or written.  In order to find the field in the page storage, the field's on-disk ID has to be set.
@@ -1634,7 +1635,7 @@ template <>
 class RField<std::string> : public Detail::RFieldBase {
 private:
    ClusterSize_t fIndex;
-   Detail::RColumnElement<ClusterSize_t, EColumnType::kIndex> fElemIndex;
+   Detail::RColumnElement<ClusterSize_t, EColumnType::kIndex32> fElemIndex;
 
    std::unique_ptr<Detail::RFieldBase> CloneImpl(std::string_view newName) const final {
       return std::make_unique<RField>(newName);
@@ -1852,7 +1853,7 @@ protected:
          auto itemValue = fSubFields[0]->CaptureValue(&typedValue->data()[i]);
          nbytes += fSubFields[0]->Append(itemValue);
       }
-      Detail::RColumnElement<ClusterSize_t, EColumnType::kIndex> elemIndex(&this->fNWritten);
+      Detail::RColumnElement<ClusterSize_t, EColumnType::kIndex32> elemIndex(&this->fNWritten);
       this->fNWritten += count;
       fColumns[0]->Append(elemIndex);
       return nbytes + sizeof(elemIndex);

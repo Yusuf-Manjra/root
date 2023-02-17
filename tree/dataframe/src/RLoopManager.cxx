@@ -379,48 +379,26 @@ RLoopManager::RLoopManager(ROOT::RDF::Experimental::RDatasetSpec &&spec)
       const auto &trees = group.GetTreeNames();
       const auto &files = group.GetFileNameGlobs();
       for (auto i = 0u; i < files.size(); ++i) {
-         const auto fullpath = files[i] + "/" + trees[i]; // TODO: use ?# once #11483 is solved
+         // We need to use `<filename>?#<treename>` as an argument to TChain::Add
+         // (see https://github.com/root-project/root/pull/8820 for why)
+         const auto fullpath = files[i] + "?#" + trees[i];
          chain->Add(fullpath.c_str());
-         fDatasetGroupMap[fullpath] = &group;
+         // ...but instead we use `<filename>/<treename>` as a sample ID (cannot
+         // change this easily because of backward compatibility: the sample ID
+         // is exposed to users via RSampleInfo and DefinePerSample).
+         const auto sampleId = files[i] + '/' + trees[i];
+         fDatasetGroupMap.insert({sampleId, &group});
       }
    }
 
    SetTree(std::move(chain));
 
-   // Create the friends from the list of friends
+   // Create friends from the specification and connect them to the main chain
    const auto &friendInfo = spec.GetFriendInfo();
-   const auto &friendNames = friendInfo.fFriendNames;
-   const auto &friendFileNames = friendInfo.fFriendFileNames;
-   const auto &friendChainSubNames = friendInfo.fFriendChainSubNames;
-   const auto nFriends = friendNames.size();
-
-   for (auto i = 0u; i < nFriends; ++i) {
-      const auto &thisFriendName = friendNames[i].first;
-      const auto &thisFriendAlias = friendNames[i].second;
-      const auto &thisFriendFiles = friendFileNames[i];
-      const auto &thisFriendChainSubNames = friendChainSubNames[i];
-
-      // Build a friend chain
-      auto frChain = std::make_unique<TChain>(thisFriendName.c_str());
-      const auto nFileNames = friendFileNames[i].size();
-      if (thisFriendChainSubNames.empty()) {
-         // If there are no chain subnames, the friend was a TTree. It's safe
-         // to add to the chain the filename directly.
-         for (auto j = 0u; j < nFileNames; ++j) {
-            frChain->Add(thisFriendFiles[j].c_str());
-         }
-      } else {
-         // Otherwise, the new friend chain needs to be built using the nomenclature
-         // "filename/treename" as argument to `TChain::Add`
-         for (auto j = 0u; j < nFileNames; ++j) {
-            frChain->Add((thisFriendFiles[j] + "/" + thisFriendChainSubNames[j]).c_str());
-         }
-      }
-
-      // Make it friends with the main chain
-      fTree->AddFriend(frChain.get(), thisFriendAlias.c_str());
-      // the friend trees must have same lifetime as fTree
-      fFriends.emplace_back(std::move(frChain));
+   fFriends = ROOT::Internal::TreeUtils::MakeFriends(friendInfo);
+   for (std::size_t i = 0ul; i < fFriends.size(); i++) {
+      const auto &thisFriendAlias = friendInfo.fFriendNames[i].second;
+      fTree->AddFriend(fFriends[i].get(), thisFriendAlias.c_str());
    }
 }
 
@@ -715,7 +693,7 @@ void RLoopManager::UpdateSampleInfo(unsigned int slot, TTreeReader &r) {
    if (range.second == -1) {
       range.second = tree->GetEntries(); // convert '-1', i.e. 'until the end', to the actual entry number
    }
-   const std::string &id = fname + "/" + treename;
+   const std::string &id = fname + '/' + treename;
    fSampleInfos[slot] =
       fDatasetGroupMap.empty() ? RSampleInfo(id, range) : RSampleInfo(id, range, fDatasetGroupMap[id]);
 }

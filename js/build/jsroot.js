@@ -11,7 +11,7 @@ let version_id = 'dev';
 
 /** @summary version date
   * @desc Release date in format day/month/year like '14/04/2022' */
-let version_date = '10/02/2023';
+let version_date = '15/02/2023';
 
 /** @summary version id and date
   * @desc Produced by concatenation of {@link version_id} and {@link version_date}
@@ -366,7 +366,11 @@ let gStyle = {
    fLegendTextSize: 0,
    fLegendFillColor: 0,
    fHatchesLineWidth: 1,
-   fHatchesSpacing: 1
+   fHatchesSpacing: 1,
+   fCandleWhiskerRange: 1.0,
+   fCandleBoxRange: 0.5,
+   fCandleScaled: false,
+   fViolinScaled: true
 };
 
 /** @summary Method returns current document in use
@@ -11025,8 +11029,9 @@ class ObjectPainter extends BasePainter {
    }
 
    /** @summary Return actual draw options as string
+     * @param ignore_pad - do not include pad settings into histogram draw options
      * @desc if options are not modified - returns original string which was specified for object draw */
-   getDrawOpt() {
+   getDrawOpt(ignore_pad) {
       if (!this.options) return '';
 
       if (isFunc(this.options.asString)) {
@@ -11039,7 +11044,7 @@ class ObjectPainter extends BasePainter {
                   changed = true;
          }
          if (changed && isFunc(this.options.asString))
-            return this.options.asString(this.isMainPainter(), pp?.getRootPad());
+            return this.options.asString(this.isMainPainter(), ignore_pad ? null : pp?.getRootPad());
       }
 
       return this.options.original || ''; // nothing better, return original draw option
@@ -58950,8 +58955,8 @@ const AxisPainterMethods = {
 
    /** @summary Assign often used members of frame painter */
    assignFrameMembers(fp, axis) {
-      fp['gr'+axis] = this.gr;                    // fp.grx
-      fp['log'+axis] = this.log;                  // fp.logx
+      fp[`gr${axis}`] = this.gr;                 // fp.grx
+      fp[`log${axis}`] = this.log;               // fp.logx
       fp[`scale_${axis}min`] = this.scale_min;   // fp.scale_xmin
       fp[`scale_${axis}max`] = this.scale_max;   // fp.scale_xmax
    },
@@ -58964,7 +58969,7 @@ const AxisPainterMethods = {
    /** @summary Convert graphical point back into axis value */
    revertPoint(pnt) {
       let value = this.func.invert(pnt);
-      return (this.kind == 'time') ?  (value - this.timeoffset) / 1000 : value;
+      return this.kind == 'time' ? (value - this.timeoffset) / 1000 : value;
    },
 
    /** @summary Provide label for time axis */
@@ -58983,8 +58988,9 @@ const AxisPainterMethods = {
       if (this.moreloglabels || (Math.abs(vlog - Math.round(vlog)) < 0.001)) {
          if (!this.noexp && (asticks != 2))
             return this.formatExp(base, Math.floor(vlog+0.01), val);
-
-         return vlog < 0 ? val.toFixed(Math.round(-vlog+0.5)) : val.toFixed(0);
+         if (Math.abs(base - Math.E) < 0.001)
+            return floatToString(val, fmt || gStyle.fStatFormat);
+         return (vlog < 0) ? val.toFixed(Math.round(-vlog+0.5)) : val.toFixed(0);
       }
       return null;
    },
@@ -59009,7 +59015,7 @@ const AxisPainterMethods = {
          value = Math.round(value/Math.pow(base,order));
          if ((value!=0) && (value!=1)) res = value.toString() + (settings.Latex ? '#times' : 'x');
       }
-      if (Math.abs(base-Math.exp(1)) < 0.001)
+      if (Math.abs(base - Math.E) < 0.001)
          res += 'e';
       else
          res += base.toString();
@@ -59234,6 +59240,7 @@ class TAxisPainter extends ObjectPainter {
       this.kind = 'normal';
       this.vertical = vertical;
       this.log = opts.log || 0;
+      this.noexp_changed = opts.noexp_changed;
       this.symlog = opts.symlog || false;
       this.reverse = opts.reverse || false;
       this.swap_side = opts.swap_side || false;
@@ -59252,7 +59259,13 @@ class TAxisPainter extends ObjectPainter {
       if (this.kind == 'time') {
          this.func = time().domain([this.convertDate(smin), this.convertDate(smax)]);
       } else if (this.log) {
-         this.logbase = this.log === 2 ? 2 : 10;
+         if ((this.log === 1) || (this.log === 10))
+            this.logbase =  10;
+         else if (this.log === 3)
+            this.logbase = Math.E;
+         else
+            this.logbase = Math.round(this.log);
+
          if (smax <= 0) smax = 1;
 
          if ((smin <= 0) && axis && !opts.logcheckmin)
@@ -59262,19 +59275,19 @@ class TAxisPainter extends ObjectPainter {
             }
 
          if ((smin <= 0) && opts.log_min_nz)
-            smin = opts.log_min_nz;
+            smin = this.log_min_nz = opts.log_min_nz;
 
          if ((smin <= 0) || (smin >= smax))
             smin = smax * (opts.logminfactor || 1e-4);
 
-         this.func = log().base((this.log == 2) ? 2 : 10).domain([smin,smax]);
+         this.func = log().base(this.logbase).domain([smin, smax]);
       } else if (this.symlog) {
          let v = Math.max(Math.abs(smin), Math.abs(smax));
          if (Number.isInteger(this.symlog) && (this.symlog > 0))
             v *= Math.pow(10,-1*this.symlog);
          else
             v *= 0.01;
-         this.func = symlog().constant(v).domain([smin,smax]);
+         this.func = symlog().constant(v).domain([smin, smax]);
       } else {
          this.func = linear().domain([smin,smax]);
       }
@@ -59336,10 +59349,9 @@ class TAxisPainter extends ObjectPainter {
             this.nticks *= this.nticks2; // all log ticks (major or minor) created centrally
             this.nticks2 = 1;
          }
-         this.noexp = axis ? axis.TestBit(EAxisBits.kNoExponent) : false;
-         if ((this.scale_max < 300) && (this.scale_min > 0.3)) this.noexp = true;
-         this.moreloglabels = axis ? axis.TestBit(EAxisBits.kMoreLogLabels) : false;
-
+         this.noexp = axis?.TestBit(EAxisBits.kNoExponent);
+         if ((this.scale_max < 300) && (this.scale_min > 0.3) && !this.noexp_changed) this.noexp = true;
+         this.moreloglabels = axis?.TestBit(EAxisBits.kMoreLogLabels);
          this.format = this.formatLog;
 
       } else if (this.kind == 'labels') {
@@ -64158,6 +64170,8 @@ function assignContextMenu(painter, kind) {
       painter.draw_g.on('contextmenu', settings.ContextMenu ? evnt => showPainterMenu(evnt, painter, kind) : null);
 }
 
+const logminfactorX = 0.0001, logminfactorY = 3e-4;
+
 function setPainterTooltipEnabled(painter, on) {
    if (!painter) return;
 
@@ -65925,12 +65939,13 @@ class TFramePainter extends ObjectPainter {
       this.x_handle.setPadName(this.getPadName());
       this.x_handle.setHistPainter(opts.hist_painter, 'x');
 
-      this.x_handle.configureAxis('xaxis', this.xmin, this.xmax, this.scale_xmin, this.scale_xmax, this.swap_xy, this.swap_xy ? [0,h] : [0,w],
+      this.x_handle.configureAxis('xaxis', this.xmin, this.xmax, this.scale_xmin, this.scale_xmax, this.swap_xy, this.swap_xy ? [0, h] : [0, w],
                                       { reverse: this.reverse_x,
                                         log: this.swap_xy ? pad.fLogy : pad.fLogx,
+                                        noexp_changed: this.x_noexp_changed,
                                         symlog: this.swap_xy ? opts.symlog_y : opts.symlog_x,
                                         logcheckmin: this.swap_xy,
-                                        logminfactor: 0.0001 });
+                                        logminfactor: logminfactorX });
 
       this.x_handle.assignFrameMembers(this, 'x');
 
@@ -65938,13 +65953,14 @@ class TFramePainter extends ObjectPainter {
       this.y_handle.setPadName(this.getPadName());
       this.y_handle.setHistPainter(opts.hist_painter, 'y');
 
-      this.y_handle.configureAxis('yaxis', this.ymin, this.ymax, this.scale_ymin, this.scale_ymax, !this.swap_xy, this.swap_xy ? [0,w] : [0,h],
+      this.y_handle.configureAxis('yaxis', this.ymin, this.ymax, this.scale_ymin, this.scale_ymax, !this.swap_xy, this.swap_xy ? [0, w] : [0, h],
                                       { reverse: this.reverse_y,
                                         log: this.swap_xy ? pad.fLogx : pad.fLogy,
+                                        noexp_changed: this.y_noexp_changed,
                                         symlog: this.swap_xy ? opts.symlog_x : opts.symlog_y,
                                         logcheckmin: (opts.ndim < 2) || this.swap_xy,
                                         log_min_nz: opts.ymin_nz && (opts.ymin_nz < 0.01*this.ymax) ? 0.3 * opts.ymin_nz : 0,
-                                        logminfactor: 3e-4 });
+                                        logminfactor: logminfactorY });
 
       this.y_handle.assignFrameMembers(this, 'y');
 
@@ -66002,8 +66018,9 @@ class TFramePainter extends ObjectPainter {
          this.x2_handle.configureAxis('x2axis', this.x2min, this.x2max, this.scale_x2min, this.scale_x2max, this.swap_xy, this.swap_xy ? [0,h] : [0,w],
                                          { reverse: this.reverse_x2,
                                            log: this.swap_xy ? pad.fLogy : pad.fLogx,
+                                           noexp_changed: this.x2_noexp_changed,
                                            logcheckmin: this.swap_xy,
-                                           logminfactor: 0.0001 });
+                                           logminfactor: logminfactorX });
          this.x2_handle.assignFrameMembers(this, 'x2');
       }
 
@@ -66015,9 +66032,10 @@ class TFramePainter extends ObjectPainter {
          this.y2_handle.configureAxis('y2axis', this.y2min, this.y2max, this.scale_y2min, this.scale_y2max, !this.swap_xy, this.swap_xy ? [0,w] : [0,h],
                                          { reverse: this.reverse_y2,
                                            log: this.swap_xy ? pad.fLogx : pad.fLogy,
+                                           noexp_changed: this.y2_noexp_changed,
                                            logcheckmin: (opts.ndim < 2) || this.swap_xy,
                                            log_min_nz: opts.ymin_nz && (opts.ymin_nz < 0.01*this.y2max) ? 0.3 * opts.ymin_nz : 0,
-                                           logminfactor: 3e-4 });
+                                           logminfactor: logminfactorY });
 
          this.y2_handle.assignFrameMembers(this, 'y2');
       }
@@ -66599,51 +66617,56 @@ class TFramePainter extends ObjectPainter {
           pad = pp?.getRootPad(true);
 
       if ((kind == 'x') || (kind == 'y') || (kind == 'z') || (kind == 'x2') || (kind == 'y2')) {
-         let faxis = obj || this[kind+'axis'];
-         menu.add('header: ' + kind.toUpperCase() + ' axis');
+         let faxis = obj || this[kind+'axis'],
+             handle = this[`${kind}_handle`];
+         menu.add(`header: ${kind.toUpperCase()} axis`);
          menu.add('Unzoom', () => this.unzoom(kind));
          if (pad) {
-            menu.add('sub:SetLog '+kind[0]);
-            menu.addchk(pad['fLog' + kind[0]] == 0, 'linear', () => this.changeAxisLog(kind[0], 0));
-            menu.addchk(pad['fLog' + kind[0]] == 1, 'log', () => this.changeAxisLog(kind[0], 1));
-            menu.addchk(pad['fLog' + kind[0]] == 2, 'log2', () => this.changeAxisLog(kind[0], 2));
+            let member = 'fLog'+kind[0];
+            menu.add('sub:SetLog '+kind[0], () => {
+               menu.input('Enter log kind: 0 - off, 1 - log10, 2 - log2, 3 - ln, ...', pad[member], 'int', 0, 10000).then(v => {
+                  this.changeAxisLog(kind[0], v);
+            });});
+            menu.addchk(pad[member] == 0, 'linear', () => this.changeAxisLog(kind[0], 0));
+            menu.addchk(pad[member] == 1, 'log10', () => this.changeAxisLog(kind[0], 1));
+            menu.addchk(pad[member] == 2, 'log2', () => this.changeAxisLog(kind[0], 2));
+            menu.addchk(pad[member] == 3, 'ln', () => this.changeAxisLog(kind[0], 3));
+            menu.addchk(pad[member] == 4, 'log4', () => this.changeAxisLog(kind[0], 4));
+            menu.addchk(pad[member] == 8, 'log8', () => this.changeAxisLog(kind[0], 8));
             menu.add('endsub:');
          }
-         menu.addchk(faxis.TestBit(EAxisBits.kMoreLogLabels), 'More log',
-               flag => {
-                  faxis.InvertBit(EAxisBits.kMoreLogLabels);
-                  if (main?.snapid && (kind.length == 1))
-                     main.interactiveRedraw('pad', `exec:SetMoreLogLabels(${flag})`, kind);
-                  else
-                     this.interactiveRedraw('pad');
-               });
-         menu.addchk(faxis.TestBit(EAxisBits.kNoExponent), 'No exponent',
-               flag => {
-                  faxis.InvertBit(EAxisBits.kNoExponent);
-                  if (main?.snapid && (kind.length == 1))
-                     main.interactiveRedraw('pad', `exec:SetNoExponent(${flag})`, kind);
-                  else
-                     this.interactiveRedraw('pad');
-               });
+         menu.addchk(faxis.TestBit(EAxisBits.kMoreLogLabels), 'More log', flag => {
+            faxis.InvertBit(EAxisBits.kMoreLogLabels);
+            if (main?.snapid && (kind.length == 1))
+               main.interactiveRedraw('pad', `exec:SetMoreLogLabels(${flag})`, kind);
+            else
+               this.interactiveRedraw('pad');
+         });
+         menu.addchk(handle?.noexp ?? faxis.TestBit(EAxisBits.kNoExponent), 'No exponent', flag => {
+            if (flag != faxis.TestBit(EAxisBits.kNoExponent))
+               faxis.InvertBit(EAxisBits.kNoExponent);
+            if (handle) handle.noexp_changed = true;
+            this[`${kind}_noexp_changed`] = true;
+            if (main?.snapid && (kind.length == 1))
+               main.interactiveRedraw('pad', `exec:SetNoExponent(${flag})`, kind);
+            else
+               this.interactiveRedraw('pad');
+         });
 
          if ((kind === 'z') && main?.options?.Zscale && isFunc(main?.fillPaletteMenu))
             main.fillPaletteMenu(menu);
 
-         if (faxis) {
-            let handle = this[`${kind}_handle`];
+         if ((handle?.kind == 'labels') && (faxis.fNbins > 20))
+            menu.add('Find label', () => menu.input('Label id').then(id => {
+               if (!id) return;
+               for (let bin = 0; bin < faxis.fNbins; ++bin) {
+                  let lbl = handle.formatLabels(bin);
+                  if (lbl == id)
+                     return this.zoom(kind, Math.max(0, bin - 4), Math.min(faxis.fNbins, bin+5));
+                }
+            }));
 
-            if ((handle?.kind == 'labels') && (faxis.fNbins > 20))
-               menu.add('Find label', () => menu.input('Label id').then(id => {
-                  if (!id) return;
-                  for (let bin = 0; bin < faxis.fNbins; ++bin) {
-                     let lbl = handle.formatLabels(bin);
-                     if (lbl == id)
-                        return this.zoom(kind, Math.max(0, bin - 4), Math.min(faxis.fNbins, bin+5));
-                   }
-               }));
-
-            menu.addTAxisMenu(EAxisBits, main || this, faxis, kind);
-         }
+         menu.addTAxisMenu(EAxisBits, main || this, faxis, kind);
          return true;
       }
 
@@ -66773,7 +66796,9 @@ class TFramePainter extends ObjectPainter {
 
       if (zoom_y) {
          let cnt = 0;
-         if (ymin <= this.ymin) { ymin = this.ymin; cnt++; }
+         if ((ymin <= this.ymin) || (!this.ymin && this.logy &&
+              (!this.y_handle?.log_min_nz && ymin < logminfactorY*this.ymax) || (ymin < this.y_handle?.log_min_nz)))
+            { ymin = this.ymin; cnt++; }
          if (ymax >= this.ymax) { ymax = this.ymax; cnt++; }
          if (cnt === 2) { zoom_y = false; unzoom_y = true; }
       } else {
@@ -69097,7 +69122,7 @@ class TPadPainter extends ObjectPainter {
 
       if (check_resize > 0) {
 
-         if (this._fixed_size) return (check_resize > 1); // flag used to force re-drawing of all subpads
+         if (this._fixed_size) return check_resize > 1; // flag used to force re-drawing of all subpads
 
          svg = this.getCanvSvg();
 
@@ -69841,7 +69866,8 @@ class TPadPainter extends ObjectPainter {
 
       if (!force) force = this.needRedrawByResize();
 
-      let changed = false,
+      let handle_online = this.iscan && this.pad && this.online_canvas && !this.embed_canvas && !this.batch_mode,
+          changed = false,
           redrawNext = indx => {
              if (!changed || (indx >= this.painters.length)) {
                 this.confirmDraw();
@@ -69854,6 +69880,31 @@ class TPadPainter extends ObjectPainter {
       return sync_promise.then(() => {
 
          changed = this.createCanvasSvg(force ? 2 : 1, size);
+
+         if (this.enforceCanvasSize) {
+            // mode when after window resize one tries to preserve canvas size
+            delete this.enforceCanvasSize;
+
+            if (changed && handle_online && isFunc(this.resizeBrowser) && this.pad?.fCw && this.pad?.fCh)
+               if (this.resizeBrowser(this.pad.fCw, this.pad.fCh))
+                  handle_online = false;
+         }
+
+         if (changed && handle_online) {
+            if (this._resize_tmout)
+               clearTimeout(this._resize_tmout);
+            this._resize_tmout = setTimeout(() => {
+               delete this._resize_tmout;
+               if (!this.pad) return;
+               let cw = this.getPadWidth(), ch = this.getPadHeight();
+               if ((cw > 0) && (ch > 0) && (this.pad.fCw != cw) || (this.pad.fCh != ch)) {
+                  this.pad.fCw = cw;
+                  this.pad.fCh = ch;
+                  console.log(`RESIZED:[${cw},${ch}]`);
+                  this.sendWebsocket(`RESIZED:[${cw},${ch}]`);
+               }
+            }, 1000); // long enough delay to prevent multiple occurence
+         }
 
          // if canvas changed, redraw all its subitems.
          // If redrawing was forced for canvas, same applied for sub-elements
@@ -70141,6 +70192,11 @@ class TPadPainter extends ObjectPainter {
             registerForResize(this.brlayout);
          }
 
+         // when getting first message from server, resize browser window
+         if (this.online_canvas && !this.batch_mode && this.use_openui && !this.embed_canvas &&
+              (first.fCw > 0) && (first.fCh > 0) && isFunc(this.resizeBrowser))
+               this.resizeBrowser(first.fCw, first.fCh);
+
          this.createCanvasSvg(0);
 
          if (!this.batch_mode)
@@ -70348,7 +70404,7 @@ class TPadPainter extends ObjectPainter {
          if (isFunc(sub.getWebPadOptions)) {
             if (scan_subpads) sub.getWebPadOptions(arg, cp);
          } else if (sub.snapid) {
-            let opt = { _typename: 'TWebObjectOptions', snapid: sub.snapid.toString(), opt: sub.getDrawOpt(), fcust: '', fopt: [] };
+            let opt = { _typename: 'TWebObjectOptions', snapid: sub.snapid.toString(), opt: sub.getDrawOpt(true), fcust: '', fopt: [] };
             if (isFunc(sub.fillWebObjectOptions))
                opt = sub.fillWebObjectOptions(opt);
             elem.primitives.push(opt);
@@ -70780,6 +70836,9 @@ class TPadPainter extends ObjectPainter {
       if (d.check('LOGZ')) pad.fLogz = 1;
       if (d.check('LOG2')) pad.fLogx = pad.fLogy = pad.fLogz = 2;
       if (d.check('LOG')) pad.fLogx = pad.fLogy = pad.fLogz = 1;
+      if (d.check('LNX')) { pad.fLogx = 3; pad.fUxmin = 0; pad.fUxmax = 1; pad.fX1 = 0; pad.fX2 = 1; }
+      if (d.check('LNY')) { pad.fLogy = 3; pad.fUymin = 0; pad.fUymax = 1; pad.fY1 = 0; pad.fY2 = 1; }
+      if (d.check('LN')) pad.fLogx = pad.fLogy = pad.fLogz = 3;
       if (d.check('GRIDX')) pad.fGridx = 1;
       if (d.check('GRIDY')) pad.fGridy = 1;
       if (d.check('GRID')) pad.fGridx = pad.fGridy = 1;
@@ -71517,6 +71576,29 @@ class TCanvasPainter extends TPadPainter {
          canv.fPrimitives.Clear();
 
       return res;
+   }
+
+   /** @summary resize browser window to get requested canvas sizes */
+   resizeBrowser(canvW, canvH) {
+      if (!isFunc(window?.resizeTo) || !canvW || !canvH || isBatchMode() || this.embed_canvas || this.batch_mode)
+         return;
+
+      let cW = this.getPadWidth(), cH = this.getPadHeight();
+      if (!cW || !cH) {
+         let dom = this.selectDom('origin');
+         if (dom.empty()) return;
+         let rect = getElementRect(dom);
+         cW = rect.width;
+         cH = rect.height;
+         if (!cW || !cH) return;
+      }
+
+      let fullW = window.innerWidth - cW + canvW,
+          fullH = window.innerHeight - cH + canvH;
+      if ((fullW > 0) && (fullH > 0) && ((cW != canvW) || (cH != canvH))) {
+          window.resizeTo(fullW, fullH);
+          return true;
+      }
    }
 
    /** @summary draw TCanvas */
@@ -75296,6 +75378,9 @@ class THistPainter extends ObjectPainter {
 
 } // class THistPainter
 
+const PadDrawOptions = ['USE_PAD_TITLE', 'LOGXY', 'LOGX', 'LOGY', 'LOGZ', 'LOG', 'LOG2X', 'LOG2Y', 'LOG2',
+                        'LNX', 'LNY', 'LN', 'GRIDXY', 'GRIDX', 'GRIDY', 'TICKXY', 'TICKX', 'TICKY', 'FB'];
+
 /**
  * @summary Painter for TH1 classes
  * @private
@@ -76472,7 +76557,7 @@ let TH1Painter$2 = class TH1Painter extends THistPainter {
 
    /** @summary draw TH1 object */
    static async draw(dom, histo, opt) {
-      return THistPainter._drawHist(new TH1Painter$2(dom, histo), opt);
+      return THistPainter._drawHist(new TH1Painter(dom, histo), opt);
    }
 
 }; // class TH1Painter
@@ -78113,17 +78198,19 @@ let TH2Painter$2 = class TH2Painter extends THistPainter {
       let histo = this.getHisto(),
           handle = this.prepareDraw(),
           pmain = this.getFramePainter(), // used for axis values conversions
+          cp = this.getCanvPainter(),
           funcs = pmain.getGrFuncs(this.options.second_x, this.options.second_y),
           bars = '', lines = '', dashed_lines = '',
           hists = '', hlines = '',
           markers = '', cmarkers = '', attrcmarkers = null,
           xx, proj, swapXY = isOption(kHorizontal),
-          scaledViolin = true, scaledCandle = false,
+          scaledViolin = gStyle.fViolinScaled,
+          scaledCandle = gStyle.fCandleScaled,
           maxContent = 0, maxIntegral = 0;
 
       if (this.options.Scaled !== null)
          scaledViolin = scaledCandle = this.options.Scaled;
-      else if (histo.fTitle.indexOf('unscaled') >= 0)
+      else if (cp?.online_canvas) ; else if(histo.fTitle.indexOf('unscaled') >= 0)
          scaledViolin = scaledCandle = false;
       else if (histo.fTitle.indexOf('scaled') >= 0)
          scaledViolin = scaledCandle = true;
@@ -78169,12 +78256,12 @@ let TH2Painter$2 = class TH2Painter extends THistPainter {
       handle.candle = []; // array of drawn points
 
       // Determining the quantiles
-      const fBoxRange = 0.5, // for now constants, later can be made configurable
-            prob = [ 1e-15 ,
-                    0.5 - fBoxRange/2.,
-                    0.5,
-                    0.5 + fBoxRange/2.,
-                    1-1e-15 ];
+      const wRange = gStyle.fCandleWhiskerRange, bRange = gStyle.fCandleBoxRange,
+            prob = [ (wRange >= 1) ? 1e-15 : 0.5 - wRange/2.,
+                     (bRange >= 1) ? 1E-14 : 0.5 - bRange/2.,
+                     0.5,
+                     (bRange >= 1) ? 1-1E-14 : 0.5 + bRange/2.,
+                     (wRange >= 1) ? 1-1e-15 : 0.5 + wRange/2. ];
 
       const produceCandlePoint = (bin_indx, grx_left, grx_right, xindx1, xindx2) => {
          let res = extractQuantiles(xx, proj, prob);
@@ -79272,7 +79359,7 @@ let TH2Painter$2 = class TH2Painter extends THistPainter {
 
    /** @summary draw TH2 object */
    static async draw(dom, histo, opt) {
-      return THistPainter._drawHist(new TH2Painter$2(dom, histo), opt);
+      return THistPainter._drawHist(new TH2Painter(dom, histo), opt);
    }
 
 }; // class TH2Painter
@@ -82251,9 +82338,9 @@ function createTorusBuffer( shape, faces_limit ) {
    if (shape.fDphi !== 360)
       for (let t = 0; t <= tubularSegments; t += tubularSegments) {
          let tube1 = shape.fRmax, tube2 = shape.fRmin,
-             d1 = (t > 0) ? 0 : 1, d2 = 1 - d1,
-             skip = (shape.fRmin) > 0 ?  0 : 1,
-             nsign = (t > 0) ? 1 : -1;
+             d1 = t > 0 ? 0 : 1, d2 = 1 - d1,
+             skip = shape.fRmin > 0 ? 0 : 1,
+             nsign = t > 0 ? 1 : -1;
          for (let n = 0; n < radialSegments; ++n) {
             creator.addFace4((radius + tube1 * _cosr[n+d1]) * _cost[t], (radius + tube1 * _cosr[n+d1]) * _sint[t], tube1*_sinr[n+d1],
                              (radius + tube2 * _cosr[n+d1]) * _cost[t], (radius + tube2 * _cosr[n+d1]) * _sint[t], tube2*_sinr[n+d1],
@@ -105983,8 +106070,8 @@ let TGraphPainter$1 = class TGraphPainter extends ObjectPainter {
 
       // check pad options first
       res.PadStats = d.check('USE_PAD_STATS');
-      let hopt = '', checkhopt = ['USE_PAD_TITLE', 'LOGXY', 'LOGX', 'LOGY', 'LOGZ', 'GRIDXY', 'GRIDX', 'GRIDY', 'TICKXY', 'TICKX', 'TICKY'];
-      checkhopt.forEach(name => { if (d.check(name)) hopt += ';' + name; });
+      let hopt = '';
+      PadDrawOptions.forEach(name => { if (d.check(name)) hopt += ';' + name; });
       if (d.check('XAXIS_', true)) hopt += ';XAXIS_' + d.part;
       if (d.check('YAXIS_', true)) hopt += ';YAXIS_' + d.part;
 
@@ -107384,7 +107471,7 @@ let TGraphPainter$1 = class TGraphPainter extends ObjectPainter {
    }
 
    static async draw(dom, graph, opt) {
-      return TGraphPainter$1._drawGraph(new TGraphPainter$1(dom, graph), opt);
+      return TGraphPainter._drawGraph(new TGraphPainter(dom, graph), opt);
    }
 
 }; // class TGraphPainter
@@ -108495,8 +108582,8 @@ let TMultiGraphPainter$2 = class TMultiGraphPainter extends ObjectPainter {
       painter._plc = d.check('PLC');
       painter._pmc = d.check('PMC');
 
-      let hopt = '', checkhopt = ['USE_PAD_TITLE', 'LOGXY', 'LOGX', 'LOGY', 'LOGZ', 'GRIDXY', 'GRIDX', 'GRIDY', 'TICKXY', 'TICKX', 'TICKY', 'FB'];
-      checkhopt.forEach(name => { if (d.check(name)) hopt += ';' + name; });
+      let hopt = '';
+      PadDrawOptions.forEach(name => { if (d.check(name)) hopt += ';' + name; });
 
       let promise = Promise.resolve(true);
       if (d.check('A') || !painter.getMainPainter()) {
@@ -108518,7 +108605,7 @@ let TMultiGraphPainter$2 = class TMultiGraphPainter extends ObjectPainter {
 
    /** @summary Draw TMultiGraph object */
    static async draw(dom, mgraph, opt) {
-      return TMultiGraphPainter$2._drawMG(new TMultiGraphPainter$2(dom, mgraph), opt);
+      return TMultiGraphPainter._drawMG(new TMultiGraphPainter(dom, mgraph), opt);
    }
 
 }; // class TMultiGraphPainter
@@ -113512,7 +113599,8 @@ class RPadPainter extends RObjectPainter {
 
       if (!force) force = this.needRedrawByResize();
 
-      let changed = false,
+      let handle_online = this.iscan && this.pad && this.online_canvas && !this.embed_canvas && !this.batch_mode,
+          changed = false,
           redrawNext = indx => {
              if (!changed || (indx >= this.painters.length)) {
                 this.confirmDraw();
@@ -113525,6 +113613,30 @@ class RPadPainter extends RObjectPainter {
       return sync_promise.then(() => {
 
          changed = this.createCanvasSvg(force ? 2 : 1, size);
+
+         if (this.enforceCanvasSize) {
+            // mode when after window resize one tries to preserve canvas size
+            delete this.enforceCanvasSize;
+
+            if (changed && handle_online && isFunc(this.resizeBrowser) && this.pad?.fWinSize)
+               if (this.resizeBrowser(this.pad.fWinSize[0], this.pad.fWinSize[1]))
+                  handle_online = false;
+         }
+
+         if (changed && handle_online) {
+            if (this._resize_tmout)
+               clearTimeout(this._resize_tmout);
+            this._resize_tmout = setTimeout(() => {
+               delete this._resize_tmout;
+               if (!this.pad?.fWinSize) return;
+               let cw = this.getPadWidth(), ch = this.getPadHeight();
+               if ((cw > 0) && (ch > 0) && (this.pad.fWinSize[0] != cw) || (this.pad.fWinSize[1] != ch)) {
+                  this.pad.fWinSize[0] = cw;
+                  this.pad.fWinSize[1] = ch;
+                  this.sendWebsocket(`RESIZED:[${cw},${ch}]`);
+               }
+            }, 1000); // long enough delay to prevent multiple occurence
+         }
 
          // if canvas changed, redraw all its subitems.
          // If redrawing was forced for canvas, same applied for sub-elements
@@ -113814,6 +113926,11 @@ class RPadPainter extends RObjectPainter {
             this.setDom(this.brlayout.drawing_divid()); // need to create canvas
             registerForResize(this.brlayout);
          }
+
+         // when getting first message from server, resize browser window
+         if (this.online_canvas && !this.batch_mode && this.use_openui && !this.embed_canvas && snap.fWinSize &&
+              (snap.fWinSize[0] > 0) && (snap.fWinSize[1] > 0) && isFunc(this.resizeBrowser))
+                  this.resizeBrowser(snap.fWinSize[0], snap.fWinSize[1]);
 
          this.createCanvasSvg(0);
          this.addPadButtons(true);
@@ -115118,7 +115235,7 @@ class RCanvasPainter extends RPadPainter {
      * @private */
    async drawInSidePanel(canv, opt) {
       let side = this.selectDom('origin').select('.side_panel');
-      return side.empty() ?  null : this.drawObject(side.node(), canv, opt);
+      return side.empty() ? null : this.drawObject(side.node(), canv, opt);
    }
 
    /** @summary Checks if canvas shown inside ui5 widget
@@ -115578,6 +115695,30 @@ class RCanvasPainter extends RPadPainter {
       console.error('RCanvasPainter.produceJSON not yet implemented');
       return '';
    }
+
+   /** @summary resize browser window  */
+   resizeBrowser(canvW, canvH) {
+      if (!isFunc(window?.resizeTo) || !canvW || !canvH || isBatchMode() || this.embed_canvas || this.batch_mode)
+         return;
+
+      let cW = this.getPadWidth(), cH = this.getPadHeight();
+      if (!cW || !cH) {
+         let dom = this.selectDom('origin');
+         if (dom.empty()) return;
+         let rect = getElementRect(dom);
+         cW = rect.width;
+         cH = rect.height;
+         if (!cW || !cH) return;
+      }
+
+      let fullW = window.innerWidth - cW + canvW,
+          fullH = window.innerHeight - cH + canvH;
+      if ((fullW > 0) && (fullH > 0) && ((cW != canvW) || (cH != canvH))) {
+          window.resizeTo(fullW, fullH);
+          return true;
+      }
+   }
+
 
    /** @summary draw RCanvas object */
    static async draw(dom, can /*, opt */) {
@@ -118581,7 +118722,7 @@ let RH1Painter$2 = class RH1Painter extends RHistPainter {
 
    /** @summary draw RH1 object */
    static async draw(dom, histo, opt) {
-      return RH1Painter$2._draw(new RH1Painter$2(dom, histo), opt);
+      return RH1Painter._draw(new RH1Painter(dom, histo), opt);
    }
 
 }; // class RH1Painter
@@ -120002,7 +120143,7 @@ let RH2Painter$2 = class RH2Painter extends RHistPainter {
    /** @summary draw RH2 object */
    static async draw(dom, obj, opt) {
       // create painter and add it to canvas
-      return RH2Painter$2._draw(new RH2Painter$2(dom, obj), opt);
+      return RH2Painter._draw(new RH2Painter(dom, obj), opt);
    }
 
 }; //  class RH2Painter

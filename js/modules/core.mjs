@@ -5,7 +5,7 @@ let version_id = 'dev';
 
 /** @summary version date
   * @desc Release date in format day/month/year like '14/04/2022' */
-let version_date = '10/02/2023';
+let version_date = '15/02/2023';
 
 /** @summary version id and date
   * @desc Produced by concatenation of {@link version_id} and {@link version_date}
@@ -361,7 +361,11 @@ let gStyle = {
    fLegendTextSize: 0,
    fLegendFillColor: 0,
    fHatchesLineWidth: 1,
-   fHatchesSpacing: 1
+   fHatchesSpacing: 1,
+   fCandleWhiskerRange: 1.0,
+   fCandleBoxRange: 0.5,
+   fCandleScaled: false,
+   fViolinScaled: true
 };
 
 /** @summary Method returns current document in use

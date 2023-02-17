@@ -28,7 +28,6 @@
 #include <RooRealSumFunc.h>
 #include <RooRealSumPdf.h>
 #include <RooRealVar.h>
-#include <RooSimultaneous.h>
 #include <RooWorkspace.h>
 
 #include <TH1.h>
@@ -162,31 +161,6 @@ public:
       RooHistFunc *hf = dynamic_cast<RooHistFunc *>(tool->request<RooAbsReal>(p["histogram"].val(), name));
       RooBinWidthFunction func(name.c_str(), name.c_str(), *hf, divideByBinWidth);
       tool->workspace()->import(func, RooFit::RecycleConflictNodes(true), RooFit::Silence(true));
-      return true;
-   }
-};
-
-class RooSimultaneousFactory : public RooFit::JSONIO::Importer {
-public:
-   bool importPdf(RooJSONFactoryWSTool *tool, const JSONNode &p) const override
-   {
-      std::string name(RooJSONFactoryWSTool::name(p));
-      if (!p.has_child("channels")) {
-         RooJSONFactoryWSTool::error("no channel components of '" + name + "'");
-      }
-      std::map<std::string, RooAbsPdf *> components;
-      std::string indexname(p["index"].val());
-      RooCategory cat(indexname.c_str(), indexname.c_str());
-      for (const auto &comp : p["channels"].children()) {
-         std::string catname(RooJSONFactoryWSTool::name(comp));
-         RooJSONFactoryWSTool::log(RooFit::INFO) << "importing category " << catname << std::endl;
-         std::string pdfname(comp.has_val() ? comp.val() : RooJSONFactoryWSTool::name(comp));
-         RooAbsPdf *pdf = tool->request<RooAbsPdf>(pdfname, name);
-         components[catname] = pdf;
-         cat.defineType(catname.c_str());
-      }
-      RooSimultaneous simpdf(name.c_str(), name.c_str(), components, cat);
-      tool->workspace()->import(simpdf, RooFit::RecycleConflictNodes(true), RooFit::Silence(true));
       return true;
    }
 };
@@ -361,32 +335,6 @@ public:
    }
 };
 
-class RooSimultaneousStreamer : public RooFit::JSONIO::Exporter {
-public:
-   std::string const &key() const override
-   {
-      const static std::string keystring = "simultaneous";
-      return keystring;
-   }
-   bool exportObject(RooJSONFactoryWSTool *, const RooAbsArg *func, JSONNode &elem) const override
-   {
-      const RooSimultaneous *sim = static_cast<const RooSimultaneous *>(func);
-      elem["type"] << key();
-      elem["index"] << sim->indexCat().GetName();
-      auto &channels = elem["channels"];
-      channels.set_map();
-      const auto &indexCat = sim->indexCat();
-      for (const auto &cat : indexCat) {
-         const auto catname = cat.first.c_str();
-         RooAbsPdf *pdf = sim->getPdf(catname);
-         if (!pdf)
-            RooJSONFactoryWSTool::error("no pdf found for category");
-         channels[catname] << pdf->GetName();
-      }
-      return true;
-   }
-};
-
 class RooHistFuncStreamer : public RooFit::JSONIO::Exporter {
 public:
    std::string const &key() const override
@@ -417,11 +365,9 @@ public:
       if (!p.has_child("data")) {
          RooJSONFactoryWSTool::error("function '" + name + "' is of histogram type, but does not define a 'data' key");
       }
-      RooArgSet varlist;
-      RooJSONFactoryWSTool::getObservables(ws, p["data"], name, varlist);
       RooDataHist *dh = dynamic_cast<RooDataHist *>(ws.embeddedData(name));
       if (!dh) {
-         auto dhForImport = RooJSONFactoryWSTool::readBinnedData(ws, p["data"], name, varlist);
+         auto dhForImport = RooJSONFactoryWSTool::readBinnedData(p["data"], name);
          ws.import(*dhForImport, RooFit::Silence(true), RooFit::Embedded());
          dh = static_cast<RooDataHist *>(ws.embeddedData(dhForImport->GetName()));
       }
@@ -459,11 +405,9 @@ public:
       if (!p.has_child("data")) {
          RooJSONFactoryWSTool::error("function '" + name + "' is of histogram type, but does not define a 'data' key");
       }
-      RooArgSet varlist;
-      tool->getObservables(*tool->workspace(), p["data"], name, varlist);
       RooDataHist *dh = dynamic_cast<RooDataHist *>(tool->workspace()->embeddedData(name));
       if (!dh) {
-         auto dhForImport = tool->readBinnedData(*tool->workspace(), p["data"], name, varlist);
+         auto dhForImport = tool->readBinnedData(p["data"], name);
          tool->workspace()->import(*dhForImport, RooFit::Silence(true), RooFit::Embedded());
          dh = static_cast<RooDataHist *>(tool->workspace()->embeddedData(dhForImport->GetName()));
       }
@@ -598,7 +542,6 @@ STATIC_EXECUTE([]() {
    registerImporter<RooAddPdfFactory>("pdfsum", false);
    registerImporter<RooHistFuncFactory>("histogram", false);
    registerImporter<RooHistPdfFactory>("histogramPdf", false);
-   registerImporter<RooSimultaneousFactory>("simultaneous", false);
    registerImporter<RooBinWidthFunctionFactory>("binwidth", false);
    registerImporter<RooRealSumPdfFactory>("sumpdf", false);
    registerImporter<RooRealSumFuncFactory>("sumfunc", false);
@@ -606,7 +549,6 @@ STATIC_EXECUTE([]() {
 
    registerExporter<RooBinWidthFunctionStreamer>(RooBinWidthFunction::Class(), false);
    registerExporter<RooProdPdfStreamer>(RooProdPdf::Class(), false);
-   registerExporter<RooSimultaneousStreamer>(RooSimultaneous::Class(), false);
    registerExporter<RooBinSamplingPdfStreamer>(RooBinSamplingPdf::Class(), false);
    registerExporter<RooHistFuncStreamer>(RooHistFunc::Class(), false);
    registerExporter<RooHistPdfStreamer>(RooHistPdf::Class(), false);

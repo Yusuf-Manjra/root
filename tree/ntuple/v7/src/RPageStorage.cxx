@@ -309,7 +309,6 @@ ROOT::Experimental::Detail::RPageSink::AddColumn(DescriptorId_t fieldId, const R
    return ColumnHandle_t{columnId, &column};
 }
 
-
 void ROOT::Experimental::Detail::RPageSink::Create(RNTupleModel &model)
 {
    fDescriptorBuilder.SetNTuple(fNTupleName, model.GetDescription());
@@ -498,7 +497,7 @@ ROOT::Experimental::Detail::RPageSink::SealPage(const RPage &page,
 
    R__ASSERT(isAdoptedBuffer);
 
-   return RSealedPage{pageBuf, zippedBytes, page.GetNElements()};
+   return RSealedPage{pageBuf, static_cast<std::uint32_t>(zippedBytes), page.GetNElements()};
 }
 
 ROOT::Experimental::Detail::RPageStorage::RSealedPage

@@ -18,6 +18,8 @@
 #include "RooStats/HistFactory/Channel.h"
 #include "RooStats/HistFactory/Sample.h"
 
+#include "Domains.h"
+
 using RooFit::Detail::JSONNode;
 using RooFit::Detail::JSONTree;
 
@@ -91,7 +93,8 @@ void exportChannel(const RooStats::HistFactory::Channel &c, JSONNode &ch)
    }
 }
 
-void exportMeasurement(RooStats::HistFactory::Measurement &measurement, JSONNode &n)
+void exportMeasurement(RooStats::HistFactory::Measurement &measurement, JSONNode &n,
+                       RooFit::JSONIO::Detail::Domains &domains)
 {
    using namespace RooStats::HistFactory;
 
@@ -99,9 +102,6 @@ void exportMeasurement(RooStats::HistFactory::Measurement &measurement, JSONNode
       if (!ch.CheckHistograms())
          throw std::runtime_error("unable to export histograms, please call CollectHistograms first");
    }
-
-   auto &pdflist = n["pdfs"];
-   pdflist.set_map();
 
    // collect information
    std::map<std::string, RooStats::HistFactory::Constraint::Type> constraints;
@@ -137,48 +137,68 @@ void exportMeasurement(RooStats::HistFactory::Measurement &measurement, JSONNode
       }
    }
 
+   auto &pdflist = n["distributions"];
+   pdflist.set_map();
+
+   auto &likelihoodlist = n["likelihoods"];
+   likelihoodlist.set_map();
+
+   auto &analysislist = n["analyses"];
+   analysislist.set_map();
+
+   auto &analysisNode = analysislist[measurement.GetName()];
+   analysisNode.set_map();
+   analysisNode["InterpolationScheme"] << measurement.GetInterpolationScheme();
+   auto &analysisDomains = analysisNode["domains"];
+   analysisDomains.set_seq();
+   analysisDomains.append_child() << "default_domain";
+
+   auto &analysisPois = analysisNode["pois"];
+   analysisPois.set_seq();
+
+   auto &analysisObservables = analysisNode["observables"];
+   analysisObservables.set_seq();
+
+   for (const auto &poi : measurement.GetPOIList()) {
+      analysisPois.append_child() << poi;
+   }
+
+   auto &likelihoods = analysisNode["likelihoods"];
+   likelihoods.set_seq();
+
    // the simpdf
-   auto &sim = pdflist[measurement.GetName()];
-   sim.set_map();
-   sim["type"] << "simultaneous";
-   sim["index"] << "channelCat";
-   auto &simdict = sim["dict"];
-   simdict.set_map();
-   simdict["InterpolationScheme"] << measurement.GetInterpolationScheme();
-   auto &simtags = sim["tags"];
-   simtags.set_seq();
-   simtags.append_child() << "toplevel";
-   auto &ch = sim["channels"];
-   ch.set_map();
    for (const auto &c : measurement.GetChannels()) {
+
+      auto &likelihoodNode = likelihoodlist[c.GetName()];
       auto pdfName = std::string("model_") + c.GetName();
-      ch[c.GetName()] << pdfName;
+      likelihoodNode.set_map();
+
+      likelihoodNode["dist"] << pdfName;
+      likelihoodNode["obs"] << std::string("obsData_") + c.GetName();
+      likelihoods.append_child() << c.GetName();
       exportChannel(c, pdflist[pdfName]);
    }
 
    // the variables
-   auto &varlist = n["variables"];
-   varlist.set_map();
-   for (const auto &c : measurement.GetChannels()) {
-      for (const auto &s : c.GetSamples()) {
-         for (const auto &norm : s.GetNormFactorList()) {
+   JSONNode &varlist = RooJSONFactoryWSTool::makeVariablesNode(n);
+   for (const auto &channel : measurement.GetChannels()) {
+      for (const auto &sample : channel.GetSamples()) {
+         for (const auto &norm : sample.GetNormFactorList()) {
             if (!varlist.has_child(norm.GetName())) {
                auto &v = varlist[norm.GetName()];
                v.set_map();
                v["value"] << norm.GetVal();
-               v["min"] << norm.GetLow();
-               v["max"] << norm.GetHigh();
+               domains.readVariable(norm.GetName().c_str(), norm.GetLow(), norm.GetHigh());
             }
          }
-         for (const auto &sys : s.GetOverallSysList()) {
+         for (const auto &sys : sample.GetOverallSysList()) {
             std::string parname("alpha_");
             parname += sys.GetName();
             if (!varlist.has_child(parname)) {
                auto &v = varlist[parname];
                v.set_map();
                v["value"] << 0.;
-               v["min"] << -5.;
-               v["max"] << 5.;
+               domains.readVariable(parname.c_str(), -5., 5.);
             }
          }
       }
@@ -192,25 +212,19 @@ void exportMeasurement(RooStats::HistFactory::Measurement &measurement, JSONNode
       varlist[parname]["const"] << true;
    }
 
-   for (const auto &poi : measurement.GetPOIList()) {
-      if (!varlist[poi].has_child("tags")) {
-         auto &tags = varlist[poi]["tags"];
-         tags.set_seq();
-      }
-      varlist[poi]["tags"].append_child() << "poi";
-   }
-
    // the data
-   auto &datalist = n["data"];
+   auto &datalist = n["observations"];
    datalist.set_map();
-   auto &obsdata = datalist["obsData"];
-   obsdata.set_map();
-   obsdata["index"] << "channelCat";
+
    for (const auto &c : measurement.GetChannels()) {
       const std::vector<std::string> obsnames{"obs_x_" + c.GetName(), "obs_y_" + c.GetName(), "obs_z_" + c.GetName()};
 
-      auto &chdata = obsdata[c.GetName()];
-      RooJSONFactoryWSTool::exportHistogram(*c.GetData().GetHisto(), chdata, obsnames);
+      for (int i = 0; i < c.GetData().GetHisto()->GetDimension(); ++i) {
+         analysisObservables.append_child() << obsnames[i];
+      }
+
+      RooJSONFactoryWSTool::exportHistogram(*c.GetData().GetHisto(), datalist[std::string("obsData_") + c.GetName()],
+                                            obsnames);
    }
 }
 
@@ -220,7 +234,9 @@ void RooStats::HistFactory::JSONTool::PrintJSON(std::ostream &os)
 {
    std::unique_ptr<RooFit::Detail::JSONTree> tree = RooJSONFactoryWSTool::createNewJSONTree();
    auto &n = tree->rootnode();
-   exportMeasurement(_measurement, n);
+   RooFit::JSONIO::Detail::Domains domains;
+   exportMeasurement(_measurement, n, domains);
+   domains.writeJSON(n["domains"]);
    n.writeJSON(os);
 }
 void RooStats::HistFactory::JSONTool::PrintJSON(std::string const &filename)
@@ -234,7 +250,9 @@ void RooStats::HistFactory::JSONTool::PrintYAML(std::ostream &os)
    std::unique_ptr<RooFit::Detail::JSONTree> tree = RooJSONFactoryWSTool::createNewJSONTree();
    auto &n = tree->rootnode();
    n.set_map();
-   exportMeasurement(_measurement, n);
+   RooFit::JSONIO::Detail::Domains domains;
+   exportMeasurement(_measurement, n, domains);
+   domains.writeJSON(n["domains"]);
    n.writeYML(os);
 }
 

@@ -13,6 +13,7 @@
 #include "TFile.h"
 #include "TFriendElement.h"
 #include "TTree.h"
+#include "TVirtualIndex.h"
 
 #include <cstdint> // std::uint64_t
 #include <limits>
@@ -170,6 +171,7 @@ ROOT::TreeUtils::RFriendInfo GetFriendInfo(const TTree &tree, bool retrieveEntri
    std::vector<std::vector<std::string>> friendFileNames;
    std::vector<std::vector<std::string>> friendChainSubNames;
    std::vector<std::vector<std::int64_t>> nEntriesPerTreePerFriend;
+   std::vector<std::unique_ptr<TVirtualIndex>> treeIndexes;
 
    // Reserve space for all friends
    auto nFriends = friends->GetEntries();
@@ -200,6 +202,9 @@ ROOT::TreeUtils::RFriendInfo GetFriendInfo(const TTree &tree, bool retrieveEntri
       const auto *alias_c = tree.GetFriendAlias(frTree);
       const std::string alias = alias_c != nullptr ? alias_c : "";
 
+      auto *treeIndex = frTree->GetTreeIndex();
+      treeIndexes.emplace_back(static_cast<TVirtualIndex *>(treeIndex ? treeIndex->Clone() : nullptr));
+
       // If the current tree is a TChain
       if (auto frChain = dynamic_cast<const TChain *>(frTree)) {
          // Note that each TChainElement returned by TChain::GetListOfFiles has a name
@@ -222,9 +227,7 @@ ROOT::TreeUtils::RFriendInfo GetFriendInfo(const TTree &tree, bool retrieveEntri
          auto nFiles = chainFiles->GetEntries();
          fileNames.reserve(nFiles);
          chainSubNames.reserve(nFiles);
-         if (retrieveEntries) {
-            nEntriesInThisFriend.reserve(nFiles);
-         }
+         nEntriesInThisFriend.reserve(nFiles);
 
          // Retrieve the name of the chain and add a (name, alias) pair
          friendNames.emplace_back(std::make_pair(frChain->GetName(), alias));
@@ -248,6 +251,8 @@ ROOT::TreeUtils::RFriendInfo GetFriendInfo(const TTree &tree, bool retrieveEntri
                   throw std::runtime_error(std::string("GetFriendInfo: Could not retrieve TTree \"") + thisTreeName +
                                            "\" from file \"" + thisFileName + "\"");
                nEntriesInThisFriend.emplace_back(thisTree->GetEntries());
+            } else {
+               nEntriesInThisFriend.emplace_back(TTree::kMaxEntries);
             }
          }
       } else {
@@ -267,8 +272,9 @@ ROOT::TreeUtils::RFriendInfo GetFriendInfo(const TTree &tree, bool retrieveEntri
       }
    }
 
-   return ROOT::TreeUtils::RFriendInfo{std::move(friendNames), std::move(friendFileNames),
-                                       std::move(friendChainSubNames), std::move(nEntriesPerTreePerFriend)};
+   return ROOT::TreeUtils::RFriendInfo(std::move(friendNames), std::move(friendFileNames),
+                                       std::move(friendChainSubNames), std::move(nEntriesPerTreePerFriend),
+                                       std::move(treeIndexes));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -365,10 +371,7 @@ std::vector<std::unique_ptr<TChain>> MakeFriends(const ROOT::TreeUtils::RFriendI
       const auto &thisFriendName = finfo.fFriendNames[i].first;
       const auto &thisFriendFileNames = finfo.fFriendFileNames[i];
       const auto &thisFriendChainSubNames = finfo.fFriendChainSubNames[i];
-      const auto &thisFriendEntries =
-         finfo.fNEntriesPerTreePerFriend[i].empty()
-            ? std::vector<std::int64_t>(thisFriendFileNames.size(), std::numeric_limits<std::int64_t>::max())
-            : finfo.fNEntriesPerTreePerFriend[i];
+      const auto &thisFriendEntries = finfo.fNEntriesPerTreePerFriend[i];
 
       // Build a friend chain
       auto frChain = ROOT::Internal::TreeUtils::MakeChainForMT(thisFriendName);
@@ -382,6 +385,14 @@ std::vector<std::unique_ptr<TChain>> MakeFriends(const ROOT::TreeUtils::RFriendI
             frChain->Add((thisFriendFileNames[j] + "?#" + thisFriendChainSubNames[j]).c_str(), thisFriendEntries[j]);
          }
       }
+
+      auto &treeIndex = finfo.fTreeIndexInfos[i];
+      if (treeIndex) {
+         auto *copyOfIndex = static_cast<TVirtualIndex *>(treeIndex->Clone());
+         copyOfIndex->SetTree(frChain.get());
+         frChain->SetTreeIndex(copyOfIndex);
+      }
+
       friends.emplace_back(std::move(frChain));
    }
 

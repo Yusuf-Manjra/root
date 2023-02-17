@@ -936,7 +936,8 @@ double RooAbsPdf::extendedTerm(RooAbsData const& data, bool weightSquared, bool 
 /// <tr><td> `GlobalObservablesTag(const char* tagName)` <td> Define the set of normalization observables to be used for the constraint terms by
 ///                                                         a string attribute associated with pdf observables that match the given tagName.
 /// <tr><td> `Verbose(bool flag)`           <td> Controls RooFit informational messages in likelihood construction
-/// <tr><td> `CloneData(bool flag)`            <td> Use clone of dataset in NLL (default is true)
+/// <tr><td> `CloneData(bool flag)`            <td> Use clone of dataset in NLL (default is true).
+///                                                 \warning Deprecated option that is ignored. It is up to the implementation of the NLL creation method if the data is cloned or not.
 /// <tr><td> `Offset(std::string const& mode)` <td> Likelihood offsetting mode. Can be either:
 ///                                                 - `"none"` (default): no offsetting
 ///                                                 - `"initial"`: Offset likelihood by initial value (so that starting value of FCN in minuit is zero).
@@ -1695,13 +1696,9 @@ RooFitResult* RooAbsPdf::fitTo(RooAbsData& data, const RooLinkedList& cmdList)
     }
     else {
       size_t step = data.numEntries()/nEvents;
-      RooArgSet tinyVars(*data.get());
-      RooRealVar weight("weight","weight",1);
 
-      if (data.isWeighted()) tinyVars.add(weight);
-
-      RooDataSet tiny("tiny", "tiny", tinyVars,
-          data.isWeighted() ? RooFit::WeightVar(weight) : RooCmdArg());
+      RooDataSet tiny("tiny", "tiny", *data.get(),
+          data.isWeighted() ? RooFit::WeightVar() : RooCmdArg());
 
       for (int i=0; i<data.numEntries(); i+=step)
       {

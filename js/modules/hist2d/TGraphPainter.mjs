@@ -1,7 +1,7 @@
 import { gStyle, BIT, settings, create, createHistogram, isBatchMode, isFunc, isStr,
-         clTPaveStats, clTCutG, clTF1, clTF2, kNoZoom } from '../core.mjs';
+         clTPaveStats, clTCutG, clTF1, clTF2, kNoZoom, kNoStats } from '../core.mjs';
 import { select as d3_select } from '../d3.mjs';
-import { DrawOptions, buildSvgPath, makeTranslate } from '../base/BasePainter.mjs';
+import { DrawOptions, buildSvgCurve, makeTranslate } from '../base/BasePainter.mjs';
 import { ObjectPainter } from '../base/ObjectPainter.mjs';
 import { TH1Painter, setHistTitle, PadDrawOptions } from './TH1Painter.mjs';
 import { TAttLineHandler } from '../base/TAttLineHandler.mjs';
@@ -20,6 +20,7 @@ const kNotEditable = BIT(18),   // bit set if graph is non editable
  *
  * @private
  */
+
 
 class TGraphPainter extends ObjectPainter {
 
@@ -300,7 +301,6 @@ class TGraphPainter extends ObjectPainter {
       if (!histo) {
          histo = graph.fHistogram = createHistogram('TH1F', 100);
          histo.fName = graph.fName + '_h';
-         const kNoStats = BIT(9);
          histo.fBits = histo.fBits | kNoStats;
          this._own_histogram = true;
       } else if ((histo.fMaximum != kNoZoom) && (histo.fMinimum != kNoZoom)) {
@@ -464,10 +464,10 @@ class TGraphPainter extends ObjectPainter {
          extrabins.push(bin);
       }
 
-      let path2 = buildSvgPath(is_curve ? 'Lbezier' : 'Lline', extrabins);
+      let path2 = buildSvgCurve(extrabins, { cmd: 'L', line: !is_curve });
 
       this.draw_g.append('svg:path')
-                 .attr('d', path.path + path2.path + 'Z')
+                 .attr('d', path + path2 + 'Z')
                  .call(this.fillatt.func)
                  .style('opacity', 0.75);
    }
@@ -493,7 +493,7 @@ class TGraphPainter extends ObjectPainter {
             bin.gry = funcs.gry(bin.y - bin.eylow);
          }
 
-         let path1 = buildSvgPath((options.EF > 1) ? 'bezier' : 'line', drawbins),
+         let path1 = buildSvgCurve(drawbins, { line: options.EF < 2, qubic: true }),
              bins2 = [];
 
          for (let n = drawbins.length-1; n >= 0; --n) {
@@ -503,10 +503,10 @@ class TGraphPainter extends ObjectPainter {
          }
 
          // build upper part (in reverse direction)
-         let path2 = buildSvgPath((options.EF > 1) ? 'Lbezier' : 'Lline', bins2);
+         let path2 = buildSvgCurve(bins2, { line: options.EF < 2, cmd: 'L', qubic: true });
 
          draw_g.append('svg:path')
-               .attr('d', path1.path + path2.path + 'Z')
+               .attr('d', path1 + path2 + 'Z')
                .call(fillatt.func);
          if (main_block)
             this.draw_kind = 'lines';
@@ -533,15 +533,12 @@ class TGraphPainter extends ObjectPainter {
             bin.gry = funcs.gry(bin.y);
          }
 
-         let kind = 'line'; // simple line
-         if (excl_width) kind += 'calc'; // we need to calculated deltas to build exclusion points
-
-         let path = buildSvgPath(kind, drawbins);
+         let path = buildSvgCurve(drawbins, {line: true, calc: excl_width });
 
          if (excl_width)
              this.appendExclusion(false, path, drawbins, excl_width);
 
-         let elem = draw_g.append('svg:path').attr('d', path.path + close_symbol);
+         let elem = draw_g.append('svg:path').attr('d', path + close_symbol);
          if (options.Line)
             elem.call(lineatt.func);
 
@@ -565,16 +562,12 @@ class TGraphPainter extends ObjectPainter {
             }
          }
 
-         let kind = 'bezier';
-         if (excl_width) kind += 'calc'; // we need to calculated deltas to build exclusion points
-
-         let path = buildSvgPath(kind, curvebins);
-
+         let path = buildSvgCurve(curvebins, { qubic: !excl_width } );
          if (excl_width)
-             this.appendExclusion(true, path, curvebins, excl_width);
+            this.appendExclusion(true, path, curvebins, excl_width);
 
          draw_g.append('svg:path')
-               .attr('d', path.path)
+               .attr('d', path)
                .call(lineatt.func)
                .style('fill', 'none');
          if (main_block)

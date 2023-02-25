@@ -1,6 +1,6 @@
 import { gStyle, BIT, settings, constants, internals, create, isObject, isFunc, isStr, getPromise,
          clTList, clTPave, clTPaveText, clTPaveStats, clTPaletteAxis,
-         clTAxis, clTGaxis, clTF1, clTProfile, kNoZoom, clTCutG } from '../core.mjs';
+         clTAxis, clTGaxis, clTF1, clTProfile, kNoZoom, clTCutG, kNoStats } from '../core.mjs';
 import { ColorPalette, toHex, getColor } from '../base/colors.mjs';
 import { DrawOptions } from '../base/BasePainter.mjs';
 import { ObjectPainter, EAxisBits } from '../base/ObjectPainter.mjs';
@@ -745,18 +745,14 @@ class HistContour {
 
 } // class HistContour
 
-/** @summary histogram status bits
-  * @private */
-const TH1StatusBits = {
-   kNoStats     : BIT(9),  // don't draw stats box
-   kUserContour : BIT(10), // user specified contour levels
-   kCanRebin    : BIT(11), // can rebin axis
-   kLogX        : BIT(15), // X-axis in log scale
-   kIsZoomed    : BIT(16), // bit set when zooming on Y axis
-   kNoTitle     : BIT(17), // don't draw the histogram title
-   kIsAverage   : BIT(18)  // Bin contents are average (used by Add)
-};
-
+// TH1 bits
+//    kNoStats = BIT(9), don't draw stats box
+const kUserContour = BIT(10), // user specified contour levels
+//      kCanRebin    = BIT(11), // can rebin axis
+//      kLogX        = BIT(15), // X-axis in log scale
+//      kIsZoomed    = BIT(16), // bit set when zooming on Y axis
+      kNoTitle     = BIT(17); // don't draw the histogram title
+//      kIsAverage   = BIT(18);  // Bin contents are average (used by Add)
 
 /**
  * @summary Basic painter for histogram classes
@@ -897,10 +893,8 @@ class THistPainter extends ObjectPainter {
 
    /** @summary Generates automatic color for some objects painters */
    createAutoColor(numprimitives) {
-      if (!numprimitives) {
-         let pad = this.getPadPainter().getRootPad(true);
-         numprimitives = pad?.fPrimitves ? pad.fPrimitves.arr.length : 5;
-      }
+      if (!numprimitives)
+         numprimitives = this.getPadPainter()?.getRootPad(true)?.fPrimitves?.arr?.length || 5;
 
       let indx = this._auto_color || 0;
       this._auto_color = indx + 1;
@@ -928,11 +922,12 @@ class THistPainter extends ObjectPainter {
       if (this.options._pfc || this.options._plc || this.options._pmc) {
          let mp = this.getMainPainter();
          if (isFunc(mp?.createAutoColor)) {
-            let icolor = mp.createAutoColor();
-            if (this.options._pfc) { histo.fFillColor = icolor; delete this.fillatt; }
-            if (this.options._plc) { histo.fLineColor = icolor; delete this.lineatt; }
-            if (this.options._pmc) { histo.fMarkerColor = icolor; delete this.markeratt; }
+            let icolor = mp.createAutoColor(), exec = '';
+            if (this.options._pfc) { histo.fFillColor = icolor; exec += `SetFillColor(${icolor});;`; delete this.fillatt; }
+            if (this.options._plc) { histo.fLineColor = icolor; exec += `SetLineColor(${icolor});;`; delete this.lineatt; }
+            if (this.options._pmc) { histo.fMarkerColor = icolor; exec += `SetMarkerColor(${icolor});;`; delete this.markeratt; }
             this.options._pfc = this.options._plc = this.options._pmc = false;
+            this._auto_exec = exec; // can be reused when sending option back to server
          }
       }
 
@@ -977,9 +972,9 @@ class THistPainter extends ObjectPainter {
 
          // check only stats bit, later other settings can be monitored
          let statpainter = pp?.findPainterFor(this.findStat());
-         if (histo.TestBit(TH1StatusBits.kNoStats) != obj.TestBit(TH1StatusBits.kNoStats)) {
+         if (histo.TestBit(kNoStats) != obj.TestBit(kNoStats)) {
             histo.fBits = obj.fBits;
-            if (statpainter) statpainter.Enabled = !histo.TestBit(TH1StatusBits.kNoStats);
+            if (statpainter) statpainter.Enabled = !histo.TestBit(kNoStats);
          }
 
          // special treatment for webcanvas - also name can be changed
@@ -1277,7 +1272,7 @@ class THistPainter extends ObjectPainter {
       if (this.options.Same)
          return false;
 
-      return fp.drawAxes(false, this.options.Axis < 0, (this.options.Axis < 0),
+      return fp.drawAxes(false, this.options.Axis < 0, this.options.Axis < 0,
                          this.options.AxisPos, this.options.Zscale && this.options.Zvert, this.options.Zscale && !this.options.Zvert);
    }
 
@@ -1288,15 +1283,31 @@ class THistPainter extends ObjectPainter {
          cp.processChanges(kind, this);
    }
 
+   /** @summary Fill option object used in TWebCanvas */
+   fillWebObjectOptions(res) {
+      if (!res) {
+         if (!this.snapid || !this._auto_exec) return null;
+         res = { _typename: 'TWebObjectOptions', snapid: this.snapid.toString(), opt: this.getDrawOpt(), fcust: '', fopt: [] };
+      }
+
+      if (this._auto_exec) {
+         res.fcust = 'auto_exec:' + this._auto_exec;
+         delete this._auto_exec;
+      }
+
+      return res;
+   }
+
+
    /** @summary Toggle histogram title drawing */
    toggleTitle(arg) {
       let histo = this.getHisto();
       if (!this.isMainPainter() || !histo)
          return false;
       if (arg === 'only-check')
-         return !histo.TestBit(TH1StatusBits.kNoTitle);
-      histo.InvertBit(TH1StatusBits.kNoTitle);
-      this.drawHistTitle().then(() => this.processOnlineChange(`exec:SetBit(TH1::kNoTitle,${histo.TestBit(TH1StatusBits.kNoTitle)?1:0})`));
+         return !histo.TestBit(kNoTitle);
+      histo.InvertBit(kNoTitle);
+      this.drawHistTitle().then(() => this.processOnlineChange(`exec:SetBit(TH1::kNoTitle,${histo.TestBit(kNoTitle)?1:0})`));
    }
 
    /** @summary Draw histogram title
@@ -1311,7 +1322,7 @@ class THistPainter extends ObjectPainter {
           pp = this.getPadPainter(),
           tpainter = pp?.findPainterFor(null, 'title'),
           pt = tpainter?.getObject(),
-          draw_title = !histo.TestBit(TH1StatusBits.kNoTitle) && (st.fOptTitle > 0);
+          draw_title = !histo.TestBit(kNoTitle) && (st.fOptTitle > 0);
 
       if (!pt && isFunc(pp?.findInPrimitives))
          pt = pp.findInPrimitives('title', clTPaveText);
@@ -1435,7 +1446,7 @@ class THistPainter extends ObjectPainter {
       if (this.options.PadStats || !histo) return null;
 
       if (!force && !this.options.ForceStat) {
-         if (this.options.NoStat || histo.TestBit(TH1StatusBits.kNoStats) || !settings.AutoStat) return null;
+         if (this.options.NoStat || histo.TestBit(kNoStats) || !settings.AutoStat) return null;
 
          if ((this.options.Axis > 0) || !this.isMainPainter()) return null;
       }
@@ -1511,7 +1522,7 @@ class THistPainter extends ObjectPainter {
    /** @summary Check if such function should be drawn directly */
    needDrawFunc(histo, func) {
       if (func._typename === clTPaveStats)
-          return (func.fName !== 'stats') || (!histo.TestBit(TH1StatusBits.kNoStats) && !this.options.NoStat);
+          return (func.fName !== 'stats') || (!histo.TestBit(kNoStats) && !this.options.NoStat);
 
        if (func._typename === clTF1)
           return !func.TestBit(BIT(9));
@@ -1954,8 +1965,8 @@ class THistPainter extends ObjectPainter {
          zmax = fp.zoom_zmax;
       }
 
-      if (histo.fContour && (histo.fContour.length > 1))
-         if (histo.TestBit(TH1StatusBits.kUserContour))
+      if (histo.fContour?.length > 1)
+         if (histo.TestBit(kUserContour))
             custom_levels = histo.fContour;
          else
             nlevels = histo.fContour.length;

@@ -30,6 +30,7 @@
 #include "TArrayI.h"
 #include "TList.h"
 #include "TH1.h"
+#include "TH1K.h"
 #include "THStack.h"
 #include "TMultiGraph.h"
 #include "TEnv.h"
@@ -436,6 +437,30 @@ void TWebCanvas::CreatePadSnapshot(TPadWebSnapshot &paddata, TPad *pad, Long64_t
          CreatePadSnapshot(paddata.NewSubPad(), (TPad *)obj, version, nullptr);
       } else if (!process_primitives) {
          continue;
+      } else if (obj->InheritsFrom(TH1K::Class())) {
+         flush_master();
+         TH1K *hist = (TH1K *)obj;
+
+         Int_t nbins = hist->GetXaxis()->GetNbins();
+
+         TH1D *h1 = new TH1D("__dummy_name__", hist->GetTitle(), nbins, hist->GetXaxis()->GetXmin(), hist->GetXaxis()->GetXmax());
+         h1->SetDirectory(nullptr);
+         h1->SetName(hist->GetName());
+         hist->TAttLine::Copy(*h1);
+         hist->TAttFill::Copy(*h1);
+         hist->TAttMarker::Copy(*h1);
+         for (Int_t n = 1; n <= nbins; ++n)
+             h1->SetBinContent(n, hist->GetBinContent(n));
+
+         TIter fiter(hist->GetListOfFunctions());
+         while (auto fobj = fiter())
+            h1->GetListOfFunctions()->Add(fobj->Clone());
+
+         TString hopt = iter.GetOption();
+         if (title && first_obj) hopt.Append(";;use_pad_title");
+
+         paddata.NewPrimitive(obj, hopt.Data()).SetSnapshot(TWebSnapshot::kObject, h1, kTRUE);
+
       } else if (obj->InheritsFrom(TH1::Class())) {
          flush_master();
 
@@ -753,9 +778,12 @@ void TWebCanvas::ShowWebWindow(const ROOT::Experimental::RWebDisplayArgs &args)
    }
 
    auto w = Canvas()->GetWw(), h = Canvas()->GetWh();
+   if (Canvas()->TestBit(TCanvas::kMenuBar)) h += 40;
+   if (Canvas()->TestBit(TCanvas::kShowEventStatus)) h += 40;
+   if (Canvas()->TestBit(TCanvas::kShowEditor)) w += 200;
 
    if ((w > 10) && (w < 50000) && (h > 10) && (h < 30000))
-      fWindow->SetGeometry(w + 6, h + 22);
+      fWindow->SetGeometry(w, h);
 
    if ((args.GetBrowserKind() == ROOT::Experimental::RWebDisplayArgs::kQt5) ||
        (args.GetBrowserKind() == ROOT::Experimental::RWebDisplayArgs::kQt6) ||
@@ -1105,6 +1133,32 @@ void TWebCanvas::ProcessExecs(TPad *pad, TExec *extra)
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
+/// Execute one or several methods for selected object
+/// String can be separated by ";;" to let execute several methods at once
+void TWebCanvas::ProcessLinesForObject(TObject *obj, const std::string &lines)
+{
+   std::string buf = lines;
+
+   while (obj && !buf.empty()) {
+      std::string sub = buf;
+      auto pos = buf.find(";;");
+      if (pos == std::string::npos) {
+         sub = buf;
+         buf.clear();
+      } else {
+         sub = buf.substr(0,pos);
+         buf = buf.substr(pos+2);
+      }
+      if (sub.empty()) continue;
+
+      std::stringstream exec;
+      exec << "((" << obj->ClassName() << " *) " << std::hex << std::showbase << (size_t)obj << ")->" << sub << ";";
+      Info("ProcessData", "Obj %s Execute %s", obj->GetName(), exec.str().c_str());
+      gROOT->ProcessLine(exec.str().c_str());
+   }
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////
 /// Handle data from web browser
 /// Returns kFALSE if message was not processed
 
@@ -1340,25 +1394,10 @@ Bool_t TWebCanvas::ProcessData(unsigned connid, const std::string &arg)
         TPad *objpad = nullptr;
 
         TObject *obj = FindPrimitive(sid, 1, nullptr, &lnk, &objpad);
+
         if (obj && !buf.empty()) {
 
-           while (!buf.empty()) {
-              std::string sub = buf;
-              pos = buf.find(";;");
-              if (pos == std::string::npos) {
-                 sub = buf;
-                 buf.clear();
-              } else {
-                 sub = buf.substr(0,pos);
-                 buf = buf.substr(pos+2);
-              }
-              if (sub.empty()) continue;
-
-              std::stringstream exec;
-              exec << "((" << obj->ClassName() << " *) " << std::hex << std::showbase << (size_t)obj << ")->" << sub << ";";
-              Info("ProcessData", "Obj %s Execute %s", obj->GetName(), exec.str().c_str());
-              gROOT->ProcessLine(exec.str().c_str());
-           }
+           ProcessLinesForObject(obj, buf);
 
            if (objpad)
               objpad->Modified();
@@ -1749,7 +1788,9 @@ TPad *TWebCanvas::ProcessObjectOptions(TWebObjectOptions &item, TPad *pad, int i
       modified = true;
    }
 
-   if (item.fcust.compare("frame") == 0) {
+   if (item.fcust.compare(0,10,"auto_exec:") == 0) {
+      ProcessLinesForObject(obj, item.fcust.substr(10));
+   } else if (item.fcust.compare("frame") == 0) {
       if (obj && obj->InheritsFrom(TFrame::Class())) {
          TFrame *frame = static_cast<TFrame *>(obj);
          if (item.fopt.size() >= 4) {
@@ -1760,7 +1801,7 @@ TPad *TWebCanvas::ProcessObjectOptions(TWebObjectOptions &item, TPad *pad, int i
             modified = true;
          }
       }
-   } else if (item.fcust.compare("pave") == 0) {
+   } else if (item.fcust.compare(0,4,"pave") == 0) {
       if (obj && obj->InheritsFrom(TPave::Class())) {
          TPave *pave = static_cast<TPave *>(obj);
          if ((item.fopt.size() >= 4) && objpad) {
@@ -1777,8 +1818,20 @@ TPad *TWebCanvas::ProcessObjectOptions(TWebObjectOptions &item, TPad *pad, int i
 
             pave->ConvertNDCtoPad();
          }
+         if ((item.fcust.length() > 4) && pave->InheritsFrom(TPaveStats::Class())) {
+            // add text lines for statsbox
+            auto stats = static_cast<TPaveStats *>(pave);
+            stats->Clear();
+            size_t pos_start = 6, pos_end;
+            while ((pos_end = item.fcust.find(";;", pos_start)) != std::string::npos) {
+               stats->AddText(item.fcust.substr(pos_start, pos_end - pos_start).c_str());
+               pos_start = pos_end + 2;
+            }
+            stats->AddText(item.fcust.substr(pos_start).c_str());
+         }
       }
    }
+
 
    return modified ? objpad : nullptr;
 }

@@ -12,7 +12,6 @@
 
 #include <RooFitHS3/JSONIO.h>
 #include <RooFitHS3/RooJSONFactoryWSTool.h>
-#include <RooFit/Detail/JSONInterface.h>
 
 #include <RooGlobalFunc.h>
 #include <RooConstVar.h>
@@ -102,6 +101,21 @@ using RooFit::Detail::JSONNode;
 using RooFit::JSONIO::Detail::Domains;
 
 namespace {
+const RooFit::Detail::JSONNode &dereference_helper(const RooFit::Detail::JSONNode &n,
+                                                   const std::vector<std::string> &keys,
+                                                   const RooFit::Detail::JSONNode &default_val, size_t idx)
+{
+   if (idx >= keys.size())
+      return n;
+   if (n.has_child(keys[idx]))
+      return dereference_helper(n[keys[idx]], keys, default_val, idx + 1);
+   return default_val;
+}
+const RooFit::Detail::JSONNode &dereference(const RooFit::Detail::JSONNode &n, const std::vector<std::string> &keys,
+                                            const RooFit::Detail::JSONNode &default_val)
+{
+   return dereference_helper(n, keys, default_val, 0);
+}
 
 bool isNumber(const std::string &str)
 {
@@ -135,23 +149,23 @@ void configureVariable(RooFit::JSONIO::Detail::Domains &domains, const JSONNode 
 
 JSONNode &RooJSONFactoryWSTool::makeVariablesNode(JSONNode &rootNode)
 {
-   auto &estimates = rootNode["estimates"];
-   estimates.set_map();
-   auto &varlist = estimates["default_values"];
+   auto &parameter_points = rootNode["parameter_points"];
+   parameter_points.set_map();
+   auto &varlist = parameter_points["default_values"];
    varlist.set_map();
    return varlist;
 }
 
 JSONNode const *RooJSONFactoryWSTool::getVariablesNode(JSONNode const &rootNode)
 {
-   if (!rootNode.has_child("estimates")) {
+   if (!rootNode.has_child("parameter_points")) {
       return nullptr;
    }
-   auto &estimates = rootNode["estimates"];
-   if (!estimates.has_child("default_values")) {
+   auto &parameter_points = rootNode["parameter_points"];
+   if (!parameter_points.has_child("default_values")) {
       return nullptr;
    }
-   return &estimates["default_values"];
+   return &parameter_points["default_values"];
 }
 
 RooJSONFactoryWSTool::RooJSONFactoryWSTool(RooWorkspace &ws) : _workspace{ws} {}
@@ -402,7 +416,7 @@ std::vector<std::vector<int>> RooJSONFactoryWSTool::generateBinIndices(const Roo
 
 void RooJSONFactoryWSTool::writeObservables(const TH1 &h, JSONNode &n, const std::vector<std::string> &varnames)
 {
-   auto &observables = n["observables"];
+   auto &observables = n["variables"];
    observables.set_map();
    auto &x = observables[varnames[0]];
    writeAxis(x, *(h.GetXaxis()));
@@ -420,7 +434,7 @@ void RooJSONFactoryWSTool::exportHistogram(const TH1 &h, JSONNode &n, const std:
                                            const TH1 *errH, bool writeObservables, bool writeErrors)
 {
    n.set_map();
-   auto &weights = n["counts"];
+   auto &weights = n["contents"];
    weights.set_seq();
    if (writeErrors) {
       n["errors"].set_seq();
@@ -750,11 +764,6 @@ void RooJSONFactoryWSTool::importFunction(const JSONNode &p, bool isPdf)
       }
    } catch (const RooJSONFactoryWSTool::DependencyMissingError &ex) {
       throw ex;
-   } catch (const std::exception &ex) {
-      std::stringstream ss;
-      ss << "RooJSONFactoryWSTool(): error importing " << name << ": " << ex.what() << ". skipping." << std::endl;
-      logInputArgumentsError(std::move(ss));
-      throw ex;
    }
 }
 
@@ -787,30 +796,32 @@ std::map<std::string, std::unique_ptr<RooAbsData>> RooJSONFactoryWSTool::loadDat
          continue;
       if (!p.is_map())
          continue;
-      if (p.has_child("counts")) {
+      if (p.has_child("contents")) {
          // binned
          dataMap[name] = this->readBinnedData(p, name);
-      } else if (p.has_child("coordinates")) {
+      } else if (p.has_child("entries")) {
          // unbinned
          RooArgSet vars;
          this->getObservables(_workspace, p, name, vars);
          RooArgList varlist(vars);
          auto data = std::make_unique<RooDataSet>(name, name, vars, RooFit::WeightVar());
-         auto &coords = p["coordinates"];
+         auto &coords = p["entries"];
          auto &weights = p["weights"];
          if (coords.num_children() != weights.num_children()) {
-            RooJSONFactoryWSTool::error("inconsistent number of coordinates and weights!");
+            RooJSONFactoryWSTool::error("inconsistent number of entries and weights!");
          }
          if (!coords.is_seq()) {
-            RooJSONFactoryWSTool::error("key 'coordinates' is not a list!");
+            RooJSONFactoryWSTool::error("key 'entries' is not a list!");
          }
          for (size_t i = 0; i < coords.num_children(); ++i) {
             auto &point = coords[i];
             if (!point.is_seq()) {
-               RooJSONFactoryWSTool::error(TString::Format("coordinate point '%d' is not a list!", (int)i).Data());
+               std::stringstream errMsg;
+               errMsg << "coordinate point '" << i << "' is not a list!";
+               RooJSONFactoryWSTool::error(errMsg.str());
             }
             if (point.num_children() != varlist.size()) {
-               RooJSONFactoryWSTool::error("inconsistent number of coordinates and observables!");
+               RooJSONFactoryWSTool::error("inconsistent number of entries and observables!");
             }
             for (size_t j = 0; j < point.num_children(); ++j) {
                auto *v = static_cast<RooRealVar *>(varlist.at(j));
@@ -872,7 +883,7 @@ void RooJSONFactoryWSTool::exportData(RooAbsData *data, JSONNode &n)
       output.set_map();
       RooDataHist *dh = (RooDataHist *)(data);
 
-      auto &observablesNode = output["observables"];
+      auto &observablesNode = output["variables"];
       observablesNode.set_map();
       for (RooRealVar *var : static_range_cast<RooRealVar *>(observables)) {
          auto &observableNode = observablesNode[var->GetName()];
@@ -882,7 +893,7 @@ void RooJSONFactoryWSTool::exportData(RooAbsData *data, JSONNode &n)
          observableNode["nbins"] << var->numBins();
       }
 
-      auto &weights = output["counts"];
+      auto &weights = output["contents"];
       weights.set_seq();
       for (int i = 0; i < dh->numEntries(); ++i) {
          double w = dh->weight(i);
@@ -925,14 +936,14 @@ void RooJSONFactoryWSTool::exportData(RooAbsData *data, JSONNode &n)
       reduced_obs.add(observables);
    }
    if (!reduced_obs.empty()) {
-      exportVariables(reduced_obs, output["observables"]);
+      exportVariables(reduced_obs, output["variables"]);
    }
-   auto &weights = singlePoint && Config::stripObservables ? output["counts"] : output["weights"];
+   auto &weights = singlePoint && Config::stripObservables ? output["contents"] : output["weights"];
    weights.set_seq();
    for (int i = 0; i < ds->numEntries(); ++i) {
       ds->get(i);
       if (!(Config::stripObservables && singlePoint)) {
-         auto &coords = output["coordinates"];
+         auto &coords = output["entries"];
          coords.set_seq();
          coords.append_child().fill_seq(reduced_obs, [](auto x) { return static_cast<RooRealVar *>(x)->getVal(); });
       }
@@ -971,36 +982,47 @@ RooJSONFactoryWSTool::createObservable(RooWorkspace &ws, const std::string &name
    return rrv;
 }
 
-std::unique_ptr<RooDataHist> RooJSONFactoryWSTool::readBinnedData(const JSONNode &n, const std::string &namecomp)
+std::unique_ptr<RooDataHist> RooJSONFactoryWSTool::readBinnedData(const JSONNode &n, const std::string &name)
 {
    RooArgList varlist;
 
-   for (JSONNode const &obsNode : n["observables"].children()) {
+   for (JSONNode const &obsNode : n["variables"].children()) {
       auto var = std::make_unique<RooRealVar>(obsNode.key().c_str(), obsNode.key().c_str(), obsNode["min"].val_double(),
                                               obsNode["max"].val_double());
       var->setBins(obsNode["nbins"].val_double());
       varlist.addOwned(std::move(var));
    }
 
-   return readBinnedData(n, namecomp, varlist);
+   return readBinnedData(n, name, varlist);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 // reading binned data
 std::unique_ptr<RooDataHist>
-RooJSONFactoryWSTool::readBinnedData(const JSONNode &n, const std::string &namecomp, RooArgList varlist)
+RooJSONFactoryWSTool::readBinnedData(const JSONNode &n, const std::string &name, RooArgList varlist)
 {
-   if (!n.has_child("counts"))
-      RooJSONFactoryWSTool::error("no counts given");
-   if (!n["counts"].is_seq())
-      RooJSONFactoryWSTool::error("counts are not in list form");
-   auto &counts = n["counts"];
+   if (!n.has_child("contents"))
+      RooJSONFactoryWSTool::error("no contents given");
+
+   JSONNode const &contents = n["contents"];
+
+   if (!contents.is_seq())
+      RooJSONFactoryWSTool::error("contents are not in list form");
+
+   JSONNode const *errors = nullptr;
+   if (n.has_child("errors")) {
+      errors = &n["errors"];
+      if (!errors->is_seq())
+         RooJSONFactoryWSTool::error("errors are not in list form");
+   }
 
    auto bins = RooJSONFactoryWSTool::generateBinIndices(varlist);
-   if (counts.num_children() != bins.size())
-      RooJSONFactoryWSTool::error(TString::Format("inconsistent bin numbers: counts=%d, bins=%d",
-                                                  (int)counts.num_children(), (int)(bins.size())));
-   auto dh = std::make_unique<RooDataHist>(namecomp.c_str(), namecomp.c_str(), varlist);
+   if (contents.num_children() != bins.size()) {
+      std::stringstream errMsg;
+      errMsg << "inconsistent bin numbers: contents=" << contents.num_children() << ", bins=" << bins.size();
+      RooJSONFactoryWSTool::error(errMsg.str());
+   }
+   auto dh = std::make_unique<RooDataHist>(name.c_str(), name.c_str(), varlist);
    // temporarily disable dirty flag propagation when filling the RDH
    std::vector<double> initVals;
    for (auto &v : varlist) {
@@ -1012,7 +1034,8 @@ RooJSONFactoryWSTool::readBinnedData(const JSONNode &n, const std::string &namec
          RooRealVar *v = (RooRealVar *)(varlist.at(i));
          v->setBin(bins[ibin][i]);
       }
-      dh->add(varlist, counts[ibin].val_double());
+      const double err = errors ? (*errors)[ibin].val_double() : -1;
+      dh->add(varlist, contents[ibin].val_double(), err > 0 ? err * err : -1);
    }
    // re-enable dirty flag propagation
    for (size_t i = 0; i < varlist.size(); ++i) {
@@ -1031,8 +1054,8 @@ RooJSONFactoryWSTool::readObservables(const JSONNode &n, const std::string &obsn
    std::map<std::string, RooJSONFactoryWSTool::Var> vars;
    if (!n.is_map())
       return vars;
-   if (n.has_child("observables")) {
-      auto &observables = n["observables"];
+   if (n.has_child("variables")) {
+      auto &observables = n["variables"];
       if (!observables.is_map())
          return vars;
       if (observables.has_child("nbins")) {
@@ -1043,7 +1066,7 @@ RooJSONFactoryWSTool::readObservables(const JSONNode &n, const std::string &obsn
          }
       }
    } else {
-      vars.emplace(std::make_pair("obs_x_" + obsnamecomp, RooJSONFactoryWSTool::Var(n["counts"].num_children())));
+      vars.emplace(std::make_pair("obs_x_" + obsnamecomp, RooJSONFactoryWSTool::Var(n["contents"].num_children())));
    }
    return vars;
 }
@@ -1141,10 +1164,19 @@ void RooJSONFactoryWSTool::exportModelConfig(JSONNode &rootnode, RooStats::Model
    auto &analysisLikelihoods = analysisNode["likelihoods"];
    analysisLikelihoods.set_seq();
 
+   auto &miscinfo = rootnode["misc"];
+   miscinfo.set_map();
+   auto &rootinfo = miscinfo["ROOT_internal"];
+   rootinfo.set_map();
+   auto &modelConfigs = rootinfo["ModelConfigs"];
+   modelConfigs.set_map();
+   auto &modelConfigAux = modelConfigs[mc.GetPdf()->GetName()];
+   modelConfigAux.set_map();
+
    std::string basename = "obsData";
    if (auto s = pdf->getStringAttribute("combinedObservationName")) {
       basename = s;
-      analysisNode["combinedObservationName"] << s;
+      modelConfigAux["combinedObservationName"] << s;
    }
 
    for (auto const &item : pdf->indexCat()) {
@@ -1161,7 +1193,7 @@ void RooJSONFactoryWSTool::exportModelConfig(JSONNode &rootnode, RooStats::Model
          analysisNode[name].fill_seq(*args, [](auto const &arg) { return arg->GetName(); });
    };
 
-   writeList("observables", mc.GetObservables());
+   writeList("variables", mc.GetObservables());
    writeList("pois", mc.GetParametersOfInterest());
    writeList("nps", mc.GetNuisanceParameters());
    writeList("globs", mc.GetGlobalObservables());
@@ -1202,12 +1234,12 @@ void RooJSONFactoryWSTool::exportAllObjects(JSONNode &n)
       }
    }
    for (auto d : _workspace.allData()) {
-      auto &data = n["observations"];
+      auto &data = n["data"];
       data.set_map();
       this->exportData(d, data);
    }
    for (auto *snsh : static_range_cast<RooArgSet const *>(_workspace.getSnapshots())) {
-      auto &snapshots = n["estimates"];
+      auto &snapshots = n["parameter_points"];
       snapshots.set_map();
       this->exportVariables(*snsh, snapshots[snsh->GetName()]);
    }
@@ -1313,7 +1345,8 @@ bool RooJSONFactoryWSTool::exportYML(std::string const &filename)
 }
 
 void RooJSONFactoryWSTool::importAnalysis(const RooFit::Detail::JSONNode &analysisNode,
-                                          const RooFit::Detail::JSONNode &likelihoodsNode)
+                                          const RooFit::Detail::JSONNode &likelihoodsNode,
+                                          const RooFit::Detail::JSONNode &mcAuxNode)
 {
 
    // if this is a toplevel pdf, also create a modelConfig for it
@@ -1341,13 +1374,16 @@ void RooJSONFactoryWSTool::importAnalysis(const RooFit::Detail::JSONNode &analys
       ss << ", " << child.val() << "=" << likelihoodsNode[child.val()]["dist"].val();
    }
    ss << ")";
-   RooSimultaneous &pdf = *static_cast<RooSimultaneous *>(_workspace.factory(ss.str()));
+   RooSimultaneous *pdf = static_cast<RooSimultaneous *>(_workspace.factory(ss.str()));
+   if (!pdf) {
+      throw std::runtime_error("unable to import simultaneous pdf!");
+   }
 
    auto &mc = *static_cast<RooStats::ModelConfig *>(_workspace.obj(mcname));
    mc.SetWS(_workspace);
-   mc.SetPdf(pdf);
+   mc.SetPdf(*pdf);
    RooArgSet observables;
-   for (auto const &child : analysisNode["observables"].children()) {
+   for (auto const &child : analysisNode["variables"].children()) {
       if (auto var = _workspace.var(child.val())) {
          observables.add(*var);
       }
@@ -1358,7 +1394,7 @@ void RooJSONFactoryWSTool::importAnalysis(const RooFit::Detail::JSONNode &analys
       pois.add(*_workspace.var(child.val()));
    }
    RooArgSet globs;
-   std::unique_ptr<RooArgSet> pdfVars{pdf.getVariables()};
+   std::unique_ptr<RooArgSet> pdfVars{pdf->getVariables()};
    for (auto &var : _workspace.allVars()) {
       if (!pdfVars->find(*var))
          continue;
@@ -1377,7 +1413,7 @@ void RooJSONFactoryWSTool::importAnalysis(const RooFit::Detail::JSONNode &analys
    // Create the combined dataset for RooFit
    std::map<std::string, RooDataSet *> dsMap;
    std::stack<std::unique_ptr<RooDataSet>> ownedDataSets;
-   RooArgSet allVars{pdf.indexCat()};
+   RooArgSet allVars{pdf->indexCat()};
    RooDataSet *channelData = nullptr;
    for (auto const &child : analysisNode["likelihoods"].children()) {
       auto &nllNode = likelihoodsNode[child.val()];
@@ -1393,17 +1429,14 @@ void RooJSONFactoryWSTool::importAnalysis(const RooFit::Detail::JSONNode &analys
    }
 
    std::string name = "obsData"; // default name for the combined data if not specified in the JSON
-   if (analysisNode.has_child("combinedObservationName")) {
-      name = analysisNode["combinedObservationName"].val();
+   if (mcAuxNode.has_child("combinedObservationName")) {
+      name = mcAuxNode["combinedObservationName"].val();
    }
 
-   pdf.setStringAttribute("combinedObservationName", name.c_str());
+   pdf->setStringAttribute("combinedObservationName", name.c_str());
 
-   RooDataSet obsData{name.c_str(),
-                      name.c_str(),
-                      allVars,
-                      RooFit::Import(dsMap),
-                      RooFit::Index(const_cast<RooCategory &>(static_cast<RooCategory const &>(pdf.indexCat())))};
+   RooDataSet obsData{name.c_str(), name.c_str(), allVars, RooFit::Import(dsMap),
+                      RooFit::Index(const_cast<RooCategory &>(static_cast<RooCategory const &>(pdf->indexCat())))};
    _workspace.import(obsData);
 }
 
@@ -1415,16 +1448,16 @@ void RooJSONFactoryWSTool::importAllNodes(const RooFit::Detail::JSONNode &n)
    _rootnodeInput = &n;
    this->importDependants(n);
 
-   if (n.has_child("observations")) {
-      auto data = this->loadData(n["observations"]);
+   if (n.has_child("data")) {
+      auto data = this->loadData(n["data"]);
       for (const auto &d : data) {
          _workspace.import(*d.second);
       }
    }
 
    _workspace.saveSnapshot("fromJSON", _workspace.allVars());
-   if (n.has_child("estimates")) {
-      for (const auto &snsh : n["estimates"].children()) {
+   if (n.has_child("parameter_points")) {
+      for (const auto &snsh : n["parameter_points"].children()) {
          std::string name = RooJSONFactoryWSTool::name(snsh);
          if (name == "fromJSON")
             continue;
@@ -1448,7 +1481,8 @@ void RooJSONFactoryWSTool::importAllNodes(const RooFit::Detail::JSONNode &n)
    // Now, read in analyses and likelihoods if there are any
    if (n.has_child("analyses")) {
       for (JSONNode const &analysisNode : n["analyses"].children()) {
-         importAnalysis(analysisNode, n["likelihoods"]);
+         importAnalysis(analysisNode, n["likelihoods"],
+                        dereference(n, {"misc", "ROOT_internal", "ModelConfigs", analysisNode.key()}, n));
       }
    }
 }

@@ -31,31 +31,47 @@ void exportSample(const RooStats::HistFactory::Sample &sample, JSONNode &s)
                                            "obs_z_" + sample.GetChannelName()};
 
    s.set_map();
+   s["name"] << sample.GetName();
 
    if (sample.GetOverallSysList().size() > 0) {
-      auto &overallSys = s["overallSystematics"];
-      overallSys.set_map();
+      auto &modifiers = s["modifiers"];
+      modifiers.set_seq();
       for (const auto &sys : sample.GetOverallSysList()) {
-         auto &node = overallSys[sys.GetName()];
+         auto &node = modifiers.append_child();
          node.set_map();
-         node["low"] << sys.GetLow();
-         node["high"] << sys.GetHigh();
+         node["type"] << "normsys";
+         node["name"] << sys.GetName();
+         auto &data = node["data"];
+         data.set_map();
+         data["lo"] << sys.GetLow();
+         data["hi"] << sys.GetHigh();
       }
    }
 
    if (sample.GetNormFactorList().size() > 0) {
-      s["normFactors"].fill_seq(sample.GetNormFactorList(), [](auto const &x) { return x.GetName(); });
+      auto &modifiers = s["modifiers"];
+      modifiers.set_seq();
+      for (const auto &nf : sample.GetNormFactorList()) {
+         auto &node = modifiers.append_child();
+         node.set_map();
+         node["type"] << "normfactor";
+         node["name"] << nf.GetName();
+      }
    }
 
    if (sample.GetHistoSysList().size() > 0) {
-      auto &histoSys = s["histogramSystematics"];
-      histoSys.set_map();
+      auto &modifiers = s["modifiers"];
+      modifiers.set_seq();
       for (size_t i = 0; i < sample.GetHistoSysList().size(); ++i) {
          auto &sys = sample.GetHistoSysList()[i];
-         auto &node = histoSys[sys.GetName()];
+         auto &node = modifiers.append_child();
          node.set_map();
-         RooJSONFactoryWSTool::exportHistogram(*(sys.GetHistoLow()), node["dataLow"], obsnames);
-         RooJSONFactoryWSTool::exportHistogram(*(sys.GetHistoHigh()), node["dataHigh"], obsnames);
+         node["type"] << "histosys";
+         node["name"] << sys.GetName();
+         auto &data = node["data"];
+         data.set_map();
+         RooJSONFactoryWSTool::exportHistogram(*(sys.GetHistoLow()), data["lo"], obsnames);
+         RooJSONFactoryWSTool::exportHistogram(*(sys.GetHistoHigh()), data["hi"], obsnames);
       }
    }
 
@@ -63,7 +79,9 @@ void exportSample(const RooStats::HistFactory::Sample &sample, JSONNode &s)
    tags.set_map();
    tags["normalizeByTheory"] << sample.GetNormalizeByTheory();
 
-   s["statError"] << sample.GetStatError().GetActivate();
+   if (sample.GetStatError().GetActivate()) {
+      RooStats::HistFactory::JSONTool::activateStatError(s);
+   }
 
    auto &data = s["data"];
    RooJSONFactoryWSTool::exportHistogram(*sample.GetHisto(), data, obsnames,
@@ -75,7 +93,8 @@ void exportSample(const RooStats::HistFactory::Sample &sample, JSONNode &s)
 void exportChannel(const RooStats::HistFactory::Channel &c, JSONNode &ch)
 {
    ch.set_map();
-   ch["type"] << "histfactory";
+   ch["name"] << "model_" + c.GetName();
+   ch["type"] << "histfactory_dist";
 
    auto &staterr = ch["statError"];
    staterr.set_map();
@@ -83,13 +102,10 @@ void exportChannel(const RooStats::HistFactory::Channel &c, JSONNode &ch)
    staterr["constraint"] << RooStats::HistFactory::Constraint::Name(c.GetStatErrorConfig().GetConstraintType());
 
    auto &samples = ch["samples"];
-   samples.set_map();
+   samples.set_seq();
    for (const auto &s : c.GetSamples()) {
-      auto &sample = samples[s.GetName()];
+      auto &sample = samples.append_child();
       exportSample(s, sample);
-      auto &ns = sample["namespaces"];
-      ns.set_seq();
-      ns.append_child() << c.GetName();
    }
 }
 
@@ -213,7 +229,7 @@ void exportMeasurement(RooStats::HistFactory::Measurement &measurement, JSONNode
    }
 
    // the data
-   auto &datalist = n["observations"];
+   auto &datalist = n["data"];
    datalist.set_map();
 
    for (const auto &c : measurement.GetChannels()) {
@@ -260,4 +276,14 @@ void RooStats::HistFactory::JSONTool::PrintYAML(std::string const &filename)
 {
    std::ofstream out(filename);
    this->PrintYAML(out);
+}
+
+void RooStats::HistFactory::JSONTool::activateStatError(JSONNode &sampleNode)
+{
+   auto &modifiers = sampleNode["modifiers"];
+   modifiers.set_seq();
+   auto &node = modifiers.append_child();
+   node.set_map();
+   node["type"] << "staterror";
+   node["name"] << "mcstat";
 }

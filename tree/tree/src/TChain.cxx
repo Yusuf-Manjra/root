@@ -362,7 +362,7 @@ Int_t TChain::Add(TChain* chain)
 Int_t TChain::Add(const char* name, Long64_t nentries /* = TTree::kMaxEntries */)
 {
    TString basename, treename, query, suffix;
-   ParseTreeFilename(name, basename, treename, query, suffix, kTRUE);
+   ParseTreeFilename(name, basename, treename, query, suffix);
 
    // case with one single file
    if (!basename.MaybeWildcard()) {
@@ -495,7 +495,7 @@ Int_t TChain::AddFile(const char* name, Long64_t nentries /* = TTree::kMaxEntrie
    if (tname && strlen(tname) > 0) treename = tname;
 
    TString basename, tn, query, suffix;
-   ParseTreeFilename(name, basename, tn, query, suffix, kFALSE);
+   ParseTreeFilename(name, basename, tn, query, suffix);
 
    if (!tn.IsNull()) {
       treename = tn.Data();
@@ -2143,23 +2143,19 @@ Long64_t TChain::Merge(TFile* file, Int_t basketsize, Option_t* option)
 /// pass the treename if the query field is empty.
 ///
 /// \param[in] name        is the original name
-/// \param[in] wildcards   indicates if the resulting filename will be treated for
-///                        wildcards. For backwards compatibility, with most protocols
-///                        this flag suppresses the search for the url fragment
-///                        identifier and limits the query identifier search to cases
-///                        where the tree name is given as a trailing slash-separated
-///                        string at the end of the file name.
 /// \param[out] filename   the url or filename to be opened or matched
 /// \param[out] treename   the treename, which may be found in a url fragment section
 ///                        as a trailing part of the name (deprecated).
 ///                        If not found this will be empty.
+///                        Exception: a fragment containing the '=' character is _not_
+///                        interpreted as a treename
 /// \param[out] query      is the url query section, including the leading question
 ///                        mark. If not found or the query section is only followed by
 ///                        a fragment this will be empty.
 /// \param[out] suffix     the portion of name which was removed to from filename.
 
-void TChain::ParseTreeFilename(const char *name, TString &filename, TString &treename, TString &query, TString &suffix,
-                               Bool_t) const
+void TChain::ParseTreeFilename(const char *name, TString &filename, TString &treename, TString &query,
+                               TString &suffix) const
 {
    Ssiz_t pIdx = kNPOS;
    filename.Clear();
@@ -2176,11 +2172,19 @@ void TChain::ParseTreeFilename(const char *name, TString &filename, TString &tre
    if (url.GetOptions() && (strlen(url.GetOptions()) > 0))
       query.Form("?%s", url.GetOptions());
    // The treename can be passed as anchor
-   if (url.GetAnchor() && (strlen(url.GetAnchor()) > 0)) {
+   const char *anchor = url.GetAnchor();
+   if (anchor && anchor[0] != '\0') {
       // Support "?#tree_name" and "?query#tree_name"
       // "#tree_name" (no '?' is for tar archives)
+      // If the treename would contain a '=', treat the anchor as part of the query instead. This makes sure
+      // that Davix parameters are passed.
       if (!query.IsNull() || strstr(name, "?#")) {
-         treename = url.GetAnchor();
+         if (strstr(anchor, "=")) {
+            query.Append("#");
+            query.Append(anchor);
+         } else {
+            treename = anchor;
+         }
       } else {
          // The anchor is part of the file name
          fn = url.GetFileAndOptions();

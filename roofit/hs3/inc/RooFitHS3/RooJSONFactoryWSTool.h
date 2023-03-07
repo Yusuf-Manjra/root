@@ -13,15 +13,18 @@
 #ifndef RooFitHS3_RooJSONFactoryWSTool_h
 #define RooFitHS3_RooJSONFactoryWSTool_h
 
+#include <RooFit/Detail/JSONInterface.h>
+
+#include <RooArgList.h>
+#include <RooArgSet.h>
+
 #include <map>
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
-class RooArgList;
 class RooAbsData;
-class RooArgSet;
 class RooAbsArg;
 class RooAbsPdf;
 class RooDataHist;
@@ -35,10 +38,6 @@ namespace Detail {
 class Domains;
 }
 } // namespace JSONIO
-namespace Detail {
-class JSONNode;
-class JSONTree;
-} // namespace Detail
 } // namespace RooFit
 namespace RooStats {
 class ModelConfig;
@@ -62,6 +61,36 @@ public:
       throw DependencyMissingError(requestAuthor, objname, T::Class()->GetName());
    }
 
+   template <class T, class Coll_t>
+   Coll_t requestCollection(const RooFit::Detail::JSONNode &node, const std::string &seqName)
+   {
+      std::string requestAuthor(RooJSONFactoryWSTool::name(node));
+      if (!node.has_child(seqName)) {
+         RooJSONFactoryWSTool::error("no \"" + seqName + "\" given in \"" + requestAuthor + "\"");
+      }
+      if (!node[seqName].is_seq()) {
+         RooJSONFactoryWSTool::error("\"" + seqName + "\" in \"" + requestAuthor + "\" is not a sequence");
+      }
+
+      Coll_t out;
+      for (const auto &elem : node[seqName].children()) {
+         out.add(*request<T>(elem.val(), requestAuthor));
+      }
+      return out;
+   }
+
+   template <class T>
+   RooArgSet requestArgSet(const RooFit::Detail::JSONNode &node, const std::string &seqName)
+   {
+      return requestCollection<T, RooArgSet>(node, seqName);
+   }
+
+   template <class T>
+   RooArgList requestArgList(const RooFit::Detail::JSONNode &node, const std::string &seqName)
+   {
+      return requestCollection<T, RooArgList>(node, seqName);
+   }
+
    RooJSONFactoryWSTool(RooWorkspace &ws);
 
    ~RooJSONFactoryWSTool();
@@ -69,7 +98,7 @@ public:
    RooWorkspace *workspace() { return &_workspace; }
 
    static void error(const char *s) { throw std::runtime_error(s); }
-   static void error(const std::string &s) { throw std::runtime_error(s); }
+   inline static void error(const std::string &s) { error(s.c_str()); }
    template <class T>
    static std::string concat(const T *items, const std::string &sep = ",")
    {
@@ -144,6 +173,22 @@ public:
    static RooFit::Detail::JSONNode &makeVariablesNode(RooFit::Detail::JSONNode &rootNode);
    static RooFit::Detail::JSONNode const *getVariablesNode(RooFit::Detail::JSONNode const &rootNode);
 
+   // error handling helpers
+   class DependencyMissingError : public std::exception {
+      std::string _parent, _child, _class, _message;
+
+   public:
+      DependencyMissingError(const std::string &p, const std::string &c, const std::string &classname)
+         : _parent(p), _child(c), _class(classname)
+      {
+         _message = "object '" + _parent + "' is missing dependency '" + _child + "' of type '" + _class + "'";
+      };
+      const std::string &parent() const { return _parent; }
+      const std::string &child() const { return _child; }
+      const std::string &classname() const { return _class; }
+      const char *what() const noexcept override { return _message.c_str(); }
+   };
+
 private:
    struct Config {
       static bool stripObservables;
@@ -163,22 +208,6 @@ private:
    std::unique_ptr<RooDataSet> unbinned(RooDataHist const &hist);
    static RooRealVar *createObservable(RooWorkspace &ws, const std::string &name, const RooJSONFactoryWSTool::Var &var);
 
-   // error handling helpers
-   class DependencyMissingError : public std::exception {
-      std::string _parent, _child, _class, _message;
-
-   public:
-      DependencyMissingError(const std::string &p, const std::string &c, const std::string &classname)
-         : _parent(p), _child(c), _class(classname)
-      {
-         _message = "object '" + _parent + "' is missing dependency '" + _child + "' of type '" + _class + "'";
-      };
-      const std::string &parent() const { return _parent; }
-      const std::string &child() const { return _child; }
-      const std::string &classname() const { return _class; }
-      const char *what() const noexcept override { return _message.c_str(); }
-   };
-
    template <class T>
    T *requestImpl(const std::string &objname);
 
@@ -192,7 +221,8 @@ private:
    void importVariables(const RooFit::Detail::JSONNode &n);
    void importVariable(const RooFit::Detail::JSONNode &n);
    void importDependants(const RooFit::Detail::JSONNode &n);
-   void importAnalysis(const RooFit::Detail::JSONNode &analysisNode, const RooFit::Detail::JSONNode &likelihoodsNode);
+   void importAnalysis(const RooFit::Detail::JSONNode &analysisNode, const RooFit::Detail::JSONNode &likelihoodsNode,
+                       const RooFit::Detail::JSONNode &mcAux);
 
    bool find(const RooFit::Detail::JSONNode &n, const std::string &elem);
    void append(RooFit::Detail::JSONNode &n, const std::string &elem);

@@ -65,14 +65,16 @@ endfunction()
 
 #---Tutorials disabled depending on the build components-------------
 if(NOT ROOT_minuit2_FOUND)
-  set(minuit2_veto fit/fit2dHist.C fit/fit2dHist.C
-                   fit/fitCircle.C fit/minuit2FitBench2D.C
+  set(minuit2_veto fit/fit2dHist.C fit/fitCircle.C
                    fit/minuit2FitBench2D.C fit/minuit2FitBench.C
-                   fit/minuit2FitBench.C fit/minuit2GausFit.C
                    fit/minuit2GausFit.C fit/NumericalMinimization.C
                    fit/combinedFit.C fit/TestBinomial.C
                    fit/fitNormSum.C fit/vectorizedFit.C
                    tutorials/roostats/rs_bernsteinCorrection.C)
+endif()
+
+if(NOT clad)
+  set(clad_veto fit/minuit2GausFit.C)
 endif()
 
 if (NOT dataframe)
@@ -410,6 +412,7 @@ if(MSVC AND ${LLVM_VERSION} VERSION_GREATER_EQUAL 13.0.0 AND NOT llvm13_broken_t
       fit/fit2dHist.C
       graphics/earth.C
       graphs/motorcycle.C
+      math/exampleFunction.py
       math/multidimSampling.C
       math/multivarGaus.C
       tree/basic.C
@@ -422,9 +425,6 @@ if(MSVC AND ${LLVM_VERSION} VERSION_GREATER_EQUAL 13.0.0 AND NOT llvm13_broken_t
       dataframe/df002_dataModel.py
       dataframe/df016_vecOps.py
       dataframe/df017_vecOpsHEP.py)
-  if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-    list(APPEND extra_veto math/exampleFunction.py)
-  endif()
 endif()
 
 set(all_veto hsimple.C
@@ -457,6 +457,7 @@ set(all_veto hsimple.C
              ${spectrum_veto}
              ${dataframe_veto}
              ${macm1_veto}
+             ${clad_veto}
              )
 
 file(GLOB_RECURSE tutorials RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} *.C)
@@ -725,11 +726,10 @@ if(ROOT_pyroot_FOUND)
 
   # Rules specific to distributed RDataFrame
   # Disable distributed RDF tutorials if we didn't check dependencies in the environment first
-  # They are always disabled on Mac ARM, until #10061 is fixed
-  if(NOT test_distrdf_pyspark OR (APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES arm64))
+  if(NOT test_distrdf_pyspark)
     list(APPEND pyveto dataframe/distrdf001_spark_connection.py)
   endif()
-  if(NOT test_distrdf_dask OR (APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES arm64))
+  if(NOT test_distrdf_dask)
     list(APPEND pyveto dataframe/distrdf002_dask_connection.py)
   endif()
   # Use main Python executable to run in PySpark driver and executors

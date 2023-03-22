@@ -11,6 +11,7 @@
 
 #include <RooHelpers.h>
 
+#include <TFile.h>
 #include <TROOT.h>
 
 #include <gtest/gtest.h>
@@ -37,9 +38,44 @@ std::unique_ptr<RooWorkspace> importToWS(std::string const &infile, std::string 
    return ws;
 }
 
+void createInputFile(std::string const &inputFileName)
+{
+
+   TH1F data("data", "data", 2, 1.0, 2.0);
+   TH1F signal("signal", "signal histogram (pb)", 2, 1.0, 2.0);
+   TH1F background1("background1", "background 1 histogram (pb)", 2, 1.0, 2.0);
+   TH1F background2("background2", "background 2 histogram (pb)", 2, 1.0, 2.0);
+   TH1F background1_statUncert("background1_statUncert", "statUncert", 2, 1.0, 2.0);
+
+   data.SetBinContent(1, 122.);
+   data.SetBinContent(2, 112.);
+
+   signal.SetBinContent(1, 20.);
+   signal.SetBinContent(2, 10.);
+
+   background1.SetBinContent(1, 100.);
+   background1.SetBinContent(2, 0.);
+
+   background2.SetBinContent(1, 0.);
+   background2.SetBinContent(2, 100.);
+
+   background1_statUncert.SetBinContent(1, 0.05);
+   background1_statUncert.SetBinContent(2, 0.05);
+
+   TFile file{inputFileName.c_str(), "RECREATE"};
+
+   data.Write();
+   signal.Write();
+   background1.Write();
+   background2.Write();
+   background1_statUncert.Write();
+}
+
 std::unique_ptr<RooStats::HistFactory::Measurement>
 measurement(std::string const &inputFileName = "test_hs3_histfactory_json_input.root")
 {
+   createInputFile(inputFileName);
+
    RooHelpers::LocalChangeMsgLevel changeMsgLvl(RooFit::WARNING);
    gROOT->SetBatch(true);
    auto meas = std::make_unique<RooStats::HistFactory::Measurement>("meas", "meas");
@@ -109,11 +145,19 @@ TEST(TestHS3HistFactoryJSON, Closure)
 
    using namespace RooFit;
 
-   pdf->fitTo(*data, Strategy(1), Minos(*mc->GetParametersOfInterest()), GlobalObservables(*mc->GetGlobalObservables()),
-              PrintLevel(-1));
+   std::unique_ptr<RooFitResult> result{pdf->fitTo(*data, Strategy(1), Minos(*mc->GetParametersOfInterest()),
+                                                   GlobalObservables(*mc->GetGlobalObservables()), PrintLevel(-1),
+                                                   Save())};
 
-   pdfFromJson->fitTo(*dataFromJson, Strategy(1), Minos(*mcFromJson->GetParametersOfInterest()),
-                      GlobalObservables(*mcFromJson->GetGlobalObservables()), PrintLevel(-1));
+   std::unique_ptr<RooFitResult> resultFromJson{
+      pdfFromJson->fitTo(*dataFromJson, Strategy(1), Minos(*mcFromJson->GetParametersOfInterest()),
+                         GlobalObservables(*mcFromJson->GetGlobalObservables()), PrintLevel(-1), Save())};
+
+   // TODO:
+   //   * fix issues that prevent us from increasing precision
+   //   * do also the reverse comparison to check that the set of constant parameters matches
+   // EXPECT_TRUE(result->isIdenticalNoCov(*resultFromJSON, 1.0, 0.01));
+   EXPECT_TRUE(resultFromJson->isIdenticalNoCov(*result, 1.0, 0.01));
 
    const double muVal = ws->var("mu")->getVal();
    const double muJsonVal = wsFromJson->var("mu")->getVal();
@@ -158,11 +202,19 @@ TEST(TestHS3HistFactoryJSON, ClosureLoop)
 
    using namespace RooFit;
 
-   pdf->fitTo(*data, Strategy(1), Minos(*mc->GetParametersOfInterest()), GlobalObservables(*mc->GetGlobalObservables()),
-              PrintLevel(-1));
+   std::unique_ptr<RooFitResult> result{pdf->fitTo(*data, Strategy(1), Minos(*mc->GetParametersOfInterest()),
+                                                   GlobalObservables(*mc->GetGlobalObservables()), PrintLevel(-1),
+                                                   Save())};
 
-   newpdf->fitTo(*newdata, Strategy(1), Minos(*newmc->GetParametersOfInterest()),
-                 GlobalObservables(*newmc->GetGlobalObservables()), PrintLevel(-1));
+   std::unique_ptr<RooFitResult> newresult{
+      newpdf->fitTo(*newdata, Strategy(1), Minos(*newmc->GetParametersOfInterest()),
+                    GlobalObservables(*newmc->GetGlobalObservables()), PrintLevel(-1), Save())};
+
+   // TODO:
+   //   * fix issues that prevent us from increasing precision
+   //   * do also the reverse comparison to check that the set of constant parameters matches
+   // EXPECT_TRUE(result->isIdenticalNoCov(*newresult, 1.0, 0.01));
+   EXPECT_TRUE(newresult->isIdenticalNoCov(*result, 1.0, 0.01));
 
    const double muVal = ws->var("mu")->getVal();
    const double muNewVal = newws.var("mu")->getVal();

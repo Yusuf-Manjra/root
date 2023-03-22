@@ -13,6 +13,8 @@
 10. Implement autoplace for TLegend
 11. Change algorithm of building smooth (bezier) curves
 12. Adjust TAxis title positioning to native ROOT behavior
+13. Let change physical node visibility in TGeo drawings
+14. Use TGaxis attributes from gStyle - fAxisMaxDigits, fStripDecimals and exponent offset
 
 
 ## Changes in 7.3.0

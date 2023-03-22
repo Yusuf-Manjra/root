@@ -62,6 +62,16 @@ public:
       throw DependencyMissingError(requestAuthor, objname, T::Class()->GetName());
    }
 
+   template <class T>
+   T *requestArg(const RooFit::Detail::JSONNode &node, const std::string &key)
+   {
+      std::string requestAuthor(RooJSONFactoryWSTool::name(node));
+      if (!node.has_child(key)) {
+         RooJSONFactoryWSTool::error("no \"" + key + "\" given in \"" + requestAuthor + "\"");
+      }
+      return request<T>(node[key].val(), requestAuthor);
+   }
+
    template <class T, class Coll_t>
    Coll_t requestCollection(const RooFit::Detail::JSONNode &node, const std::string &seqName)
    {
@@ -107,7 +117,7 @@ public:
       return wsImport(arg);
    }
 
-   static void error(const char *s) { throw std::runtime_error(s); }
+   static void error(const char *s);
    inline static void error(const std::string &s) { error(s.c_str()); }
    template <class T>
    static std::string concat(const T *items, const std::string &sep = ",")
@@ -133,32 +143,25 @@ public:
       return text;
    }
    template <class T>
-   static std::vector<std::string> names(const T *items)
+   static std::vector<std::string> names(T const &items)
    {
       // Returns a string being the concatenation of strings in input list <items>
       // (names of objects obtained using GetName()) separated by string <sep>.
       std::vector<std::string> names;
       // iterate over strings in list
-      for (auto it : *items) {
-         if (!it)
-            names.push_back("nullptr");
-         else
-            names.push_back(it->GetName());
+      for (auto it : items) {
+         names.push_back(it ? it->GetName() : "nullptr");
       }
       return names;
    }
 
-   static std::string genPrefix(const RooFit::Detail::JSONNode &p, bool trailing_underscore);
    static void exportHistogram(const TH1 &h, RooFit::Detail::JSONNode &n, const std::vector<std::string> &obsnames,
                                const TH1 *errH = nullptr, bool writeObservables = true, bool writeErrors = true);
    static void writeObservables(const TH1 &h, RooFit::Detail::JSONNode &n, const std::vector<std::string> &varnames);
 
    static std::unique_ptr<RooDataHist> readBinnedData(const RooFit::Detail::JSONNode &n, const std::string &namecomp);
    static std::unique_ptr<RooDataHist>
-   readBinnedData(const RooFit::Detail::JSONNode &n, const std::string &namecomp, RooArgList varlist);
-
-   static void
-   getObservables(RooWorkspace &ws, const RooFit::Detail::JSONNode &n, const std::string &obsnamecomp, RooArgSet &out);
+   readBinnedData(const RooFit::Detail::JSONNode &n, const std::string &namecomp, RooArgList const &varlist);
 
    bool importJSON(std::string const &filename);
    bool importYML(std::string const &filename);
@@ -174,14 +177,12 @@ public:
    bool importJSONfromString(const std::string &s);
    bool importYMLfromString(const std::string &s);
 
-   void importFunctions(const RooFit::Detail::JSONNode &n);
    void importFunction(const RooFit::Detail::JSONNode &n, bool isPdf);
    RooFit::Detail::JSONNode *exportObject(const RooAbsArg *func);
 
    static std::unique_ptr<RooFit::Detail::JSONTree> createNewJSONTree();
 
    static RooFit::Detail::JSONNode &makeVariablesNode(RooFit::Detail::JSONNode &rootNode);
-   static RooFit::Detail::JSONNode const *getVariablesNode(RooFit::Detail::JSONNode const &rootNode);
 
    // error handling helpers
    class DependencyMissingError : public std::exception {
@@ -202,39 +203,24 @@ public:
    static void
    writeCombinedDataName(RooFit::Detail::JSONNode &rootnode, std::string const &pdfName, std::string const &dataName);
 
+   static void writeChannelNames(RooFit::Detail::JSONNode &rootnode, std::string const &simPdfName,
+                                 std::vector<std::string> const &channelNames);
+
 private:
    struct Config {
       static bool stripObservables;
    };
 
-   struct Var {
-      int nbins;
-      double min;
-      double max;
-      std::vector<double> bounds;
-
-      Var(int n) : nbins(n), min(0), max(n) {}
-      Var(const RooFit::Detail::JSONNode &val);
-   };
-
-   std::map<std::string, std::unique_ptr<RooAbsData>> loadData(const RooFit::Detail::JSONNode &rootnode);
-   static RooRealVar *createObservable(RooWorkspace &ws, const std::string &name, const RooJSONFactoryWSTool::Var &var);
-
    template <class T>
    T *requestImpl(const std::string &objname);
 
    void exportData(RooAbsData &data);
-   static std::vector<std::vector<int>> generateBinIndices(const RooArgList &vars);
-   static std::map<std::string, RooJSONFactoryWSTool::Var>
-   readObservables(const RooFit::Detail::JSONNode &n, const std::string &obsnamecomp);
 
    void importAllNodes(const RooFit::Detail::JSONNode &n);
 
    void importVariables(const RooFit::Detail::JSONNode &n);
    void importVariable(const RooFit::Detail::JSONNode &n);
    void importDependants(const RooFit::Detail::JSONNode &n);
-   void importAnalysis(const RooFit::Detail::JSONNode &analysisNode, const RooFit::Detail::JSONNode &likelihoodsNode,
-                       const RooFit::Detail::JSONNode &mcAux);
 
    void exportVariable(const RooAbsArg *v, RooFit::Detail::JSONNode &n);
    void exportVariables(const RooArgSet &allElems, RooFit::Detail::JSONNode &n);
@@ -246,6 +232,7 @@ private:
 
    // member variables
    const RooFit::Detail::JSONNode *_rootnodeInput = nullptr;
+   const RooFit::Detail::JSONNode *_attributesNode = nullptr;
    RooFit::Detail::JSONNode *_rootnodeOutput = nullptr;
    RooWorkspace &_workspace;
 

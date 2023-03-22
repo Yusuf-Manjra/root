@@ -1,25 +1,29 @@
 {
-    "misc" : { "ROOT_internal" : { "ModelConfigs" : {
-        "main": {
-            "combined_data_name": "observed"
+    "misc" : { "ROOT_internal" : {
+        "ModelConfigs" : {
+            "main": {
+                "combined_data_name": "observed"
+            }
+        },
+        "channel_names" : {
+            "main": ["channel1"]
         }
-    }}},
+    }},
     "analyses": [
         {
             "name": "main",
-            "likelihood": "channel1",
+            "likelihood": "main_likelihood",
             "pois": [
                 "mu"
             ],
             "observables": [
                 "obs_x_channel1"
-            ],
-            "InterpolationScheme": ""
+            ]
         }
     ],
     "likelihoods": [
         {
-            "name": "channel1",
+            "name": "main_likelihood",
             "distributions": ["model_channel1"],
             "data": ["observed_channel1"]
         }
@@ -27,18 +31,18 @@
     "distributions": [
         {
             "name": "model_channel1",
+            "axes": [
+                {
+                    "name": "obs_x_channel1",
+                    "max": 2.0,
+                    "min": 1.0,
+                    "nbins": 2
+                }
+            ],
             "samples": [
                 {
                     "data": {
-                        "contents": [20, 10],
-                        "axes": [
-                            {
-                                "name": "obs_x_channel1",
-                                "max": 2.0,
-                                "min": 1.0,
-                                "nbins": 2
-                            }
-                        ]
+                        "contents": [20, 10]
                     },
                     "modifiers": [
                         {
@@ -59,15 +63,7 @@
                 {
                     "data": {
                         "contents": [100, 0],
-                        "errors": [5, 0],
-                        "axes": [
-                            {
-                                "name": "obs_x_channel1",
-                                "max": 2.0,
-                                "min": 1.0,
-                                "nbins": 2
-                            }
-                        ]
+                        "errors": [5, 0]
                     },
                     "modifiers": [
                         {
@@ -88,15 +84,7 @@
                 {
                     "data": {
                         "contents": [0, 100],
-                        "errors": [0, 10],
-                        "axes": [
-                            {
-                                "name": "obs_x_channel1",
-                                "max": 2.0,
-                                "min": 1.0,
-                                "nbins": 2
-                            }
-                        ]
+                        "errors": [0, 10]
                     },
                     "modifiers": [
                         {
@@ -115,35 +103,7 @@
                     "name": "background2"
                 }
             ],
-            "statError": {
-                "constraint": "Poisson",
-                "relThreshold": 0.01
-            },
             "type": "histfactory_dist"
-        }
-    ],
-    "domains": [
-        {
-            "name": "default_domain",
-            "type": "product_domain",
-            "axes": [
-                {
-                    "max": 5.0,
-                    "min": -3.0,
-                    "name": "mu"
-                }
-            ]
-        }
-    ],
-    "parameter_points": [
-        {
-            "name": "default_values",
-            "parameters": [
-                {
-                    "name": "mu",
-                    "value": 1
-                }
-            ]
         }
     ],
     "data": [

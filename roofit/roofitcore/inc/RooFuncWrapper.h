@@ -21,12 +21,15 @@
 
 /// @brief  A wrapper class to store a C++ function of type 'double (*)(double*, double*)'.
 /// The parameters can be accessed as params[<relative position of param in paramSet>] in the function body.
-/// The observables can be accessed as obs[i * num_entries + j], where i represents the observable position and j
+/// The observables can be accessed as obs[i + j], where i represents the observable position and j
 /// represents the data entry.
 class RooFuncWrapper final : public RooAbsReal {
 public:
    RooFuncWrapper(const char *name, const char *title, std::string const &funcBody, RooArgSet const &paramSet,
-                  RooArgSet const &ObsSet, const RooAbsData *data = nullptr);
+                  RooArgSet const &obsSet, const RooAbsData *data = nullptr);
+
+   RooFuncWrapper(const char *name, const char *title, RooAbsReal const &obj, RooArgSet const &normSet,
+                  const RooAbsData *data = nullptr);
 
    RooFuncWrapper(const RooFuncWrapper &other, const char *name = nullptr);
 
@@ -38,11 +41,23 @@ public:
 
    void gradient(const double *x, double *g) const;
 
+   std::size_t getNumParams() const { return _params.size(); }
+
 protected:
    double evaluate() const override;
 
 private:
+   std::string
+   buildCode(RooAbsReal const &head, RooArgSet const & /* paramSet */, RooArgSet const &obsSet, const RooAbsData *data);
+
    void updateGradientVarBuffer() const;
+
+   void
+   loadParamsAndObs(std::string funcName, RooArgSet const &paramSet, RooArgSet const &obsSet, const RooAbsData *data);
+
+   void declareAndDiffFunction(std::string funcName, std::string const &funcBody);
+
+   void buildFuncAndGradFunctors();
 
    using Func = double (*)(double *, double *);
    using Grad = void (*)(double *, double *, double *);

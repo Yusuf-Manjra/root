@@ -11,7 +11,7 @@ let version_id = 'dev';
 
 /** @summary version date
   * @desc Release date in format day/month/year like '14/04/2022' */
-let version_date = '21/03/2023';
+let version_date = '28/03/2023';
 
 /** @summary version id and date
   * @desc Produced by concatenation of {@link version_id} and {@link version_date}
@@ -1065,7 +1065,7 @@ function create$1(typename, target) {
                        fCornerRadius: 0, fOption: 'brNDC', fName: 'title' });
          break;
       case clTAttText:
-         extend$1(obj, { fTextAngle: 0, fTextSize: 0, fTextAlign: 22, fTextColor: 1, fTextFont: 42});
+         extend$1(obj, { fTextAngle: 0, fTextSize: 0, fTextAlign: 22, fTextColor: 1, fTextFont: 42 });
          break;
       case clTPaveText:
          create$1(clTPave, obj);
@@ -1095,7 +1095,7 @@ function create$1(typename, target) {
          create$1(clTAttLine, obj);
          create$1(clTAttFill, obj);
          create$1(clTAttMarker, obj);
-         extend$1(obj, { fLabel: '', fObject: null, fOption: '' });
+         extend$1(obj, { fLabel: '', fObject: null, fOption: '', fTextAlign: 0, fTextColor: 0, fTextFont: 0 });
          break;
       case clTText:
          create$1(clTNamed, obj);
@@ -8605,7 +8605,7 @@ class FontHandler {
 
       if ((this.name == 'Symbol') || (this.name == 'Wingdings')) {
          this.isSymbol = this.name;
-         this.name = "Times New Roman";
+         this.name = 'Times New Roman';
       } else {
          this.isSymbol = '';
       }
@@ -8615,12 +8615,12 @@ class FontHandler {
 
    /** @summary Assigns font-related attributes */
    setFont(selection, arg) {
-      selection.attr("font-family", this.name);
+      selection.attr('font-family', this.name);
       if (arg != 'without-size')
-         selection.attr("font-size", this.size)
-                  .attr("xml:space", "preserve");
-      selection.attr("font-weight", this.weight || null);
-      selection.attr("font-style", this.style || null);
+         selection.attr('font-size', this.size)
+                  .attr('xml:space', 'preserve');
+      selection.attr('font-weight', this.weight || null);
+      selection.attr('font-style', this.style || null);
    }
 
    /** @summary Set font size (optional) */
@@ -8648,26 +8648,26 @@ class FontHandler {
 
    /** @summary Clears all font-related attributes */
    clearFont(selection) {
-      selection.attr("font-family", null)
-               .attr("font-size", null)
-               .attr("xml:space", null)
-               .attr("font-weight", null)
-               .attr("font-style", null);
+      selection.attr('font-family', null)
+               .attr('font-size', null)
+               .attr('xml:space', null)
+               .attr('font-weight', null)
+               .attr('font-style', null);
    }
 
    /** @summary Returns true in case of monospace font
      * @private */
    isMonospace() {
       let n = this.name.toLowerCase();
-      return (n.indexOf("courier") == 0) || (n == "monospace") || (n == "monaco");
+      return (n.indexOf('courier') == 0) || (n == 'monospace') || (n == 'monaco');
    }
 
-   /** @summary Return full font declaration which can be set as font property like "12pt Arial bold"
+   /** @summary Return full font declaration which can be set as font property like '12pt Arial bold'
      * @private */
    getFontHtml() {
-      let res = Math.round(this.size) + "pt " + this.name;
-      if (this.weight) res += " " + this.weight;
-      if (this.style) res += " " + this.style;
+      let res = Math.round(this.size) + 'pt ' + this.name;
+      if (this.weight) res += ' ' + this.weight;
+      if (this.style) res += ' ' + this.style;
       return res;
    }
 
@@ -10843,14 +10843,14 @@ class TAttLineHandler {
    setArgs(args) {
       if (args.attr) {
          this.color_index = args.attr.fLineColor;
-         args.color = args.color0 || (args.painter ? args.painter.getColor(this.color_index) : getColor(this.color_index));
+         args.color = args.color0 || (args.painter?.getColor(this.color_index) ?? getColor(this.color_index));
          if (args.width === undefined) args.width = args.attr.fLineWidth;
          if (args.style === undefined) args.style = args.attr.fLineStyle;
       } else if (isStr(args.color)) {
          if ((args.color !== 'none') && !args.width) args.width = 1;
       } else if (typeof args.color == 'number') {
          this.color_index = args.color;
-         args.color = args.painter ? args.painter.getColor(args.color) : getColor(args.color);
+         args.color = args.painter?.getColor(args.color) ?? getColor(args.color);
       }
 
       if (args.width === undefined)
@@ -10978,6 +10978,120 @@ function getSvgLineStyle(indx) {
    if ((indx < 0) || (indx >= root_line_styles.length)) indx = 11;
    return root_line_styles[indx];
 }
+
+/**
+  * @summary Handle for line attributes
+  * @private
+  */
+
+class TAttTextHandler {
+
+   /** @summary constructor
+     * @param {object} attr - attributes, see {@link TAttTextHandler#setArgs} */
+   constructor(args) {
+      this.used = true;
+      if (args._typename && (args.fTextFont !== undefined)) args = { attr: args };
+      this.setArgs(args);
+   }
+
+   /** @summary Set text attributes.
+     * @param {object} args - specify attributes by different ways
+     * @param {object} args.attr - TAttText object with appropriate data members or
+     * @param {object} args.attr_alt - alternative TAttText object with appropriate data members if values are 0
+     * @param {string} args.color - color in html like rgb(255,0,0) or 'red' or '#ff0000'
+     * @param {number} args.align - text align
+     * @param {number} args.angle - text angle
+     * @param {number} args.font  - font index
+     * @param {number} args.size  - text size */
+   setArgs(args) {
+      if (args.attr) {
+         args.font = args.attr.fTextFont || args.attr_alt?.fTextFont || 0;
+         args.size = args.attr.fTextSize || args.attr_alt?.fTextSize || 0;
+         this.color_index = args.attr.fTextColor || args.attr_alt?.fTextColor || 0;
+         args.color = args.painter?.getColor(this.color_index) ?? getColor(this.color_index);
+         args.align = args.attr.fTextAlign || args.attr_alt?.fTextAlign || 0;
+         args.angle = args.attr.fTextAngle || args.attr_alt?.fTextAngle || 0;
+      } else if (typeof args.color == 'number') {
+         this.color_index = args.color;
+         args.color = args.painter?.getColor(args.color) ?? getColor(args.color);
+      }
+
+      this.font = args.font;
+      this.size = args.size;
+      this.color = args.color;
+      this.align = args.align;
+      this.angle = args.angle;
+
+      this.angle_used = false;
+      this.align_used = false;
+   }
+
+   /** @summary returns true if line attribute is empty and will not be applied. */
+   empty() { return this.color == 'none'; }
+
+   /** @summary Change text attributes */
+   change(font, size, color, align, angle) {
+      if (font !== undefined)
+         this.font = font;
+      if (size !== undefined)
+         this.size = size;
+      if (color !== undefined) {
+         if (this.color !== color)
+            delete this.color_index;
+         this.color = color;
+      }
+      if (align !== undefined)
+         this.align = align;
+      if (angle !== undefined)
+         this.angle = angle;
+      this.changed = true;
+   }
+
+   /** @summary Method used when color or pattern were changed with OpenUi5 widgets.
+     * @private */
+   verifyDirectChange(/* painter */) {
+      this.change(parseInt(this.font), parseFloat(this.size), this.color, parseInt(this.align), parseInt(this.angle));
+   }
+
+   /** @summary Create argument for drawText method */
+   createArg(arg) {
+      if (!arg) arg = {};
+      this.align_used = !arg.noalign && !arg.align;
+      if (this.align_used)
+         arg.align = this.align;
+      this.angle_used = !arg.norotate;
+      if (this.angle_used && this.angle)
+         arg.rotate = -this.angle; // SVG rotation angle has different sign
+      arg.color = this.color || 'black';
+      return arg;
+   }
+
+   /** @summary Provides pixel size */
+   getSize(w, h, fact, zero_size) {
+      if (this.size >= 1)
+         return Math.round(this.size);
+      if (!w) w = 1000;
+      if (!h) h = w;
+      if (!fact) fact = 1.;
+
+      return Math.round((this.size || zero_size || 0.) * Math.min(w,h) * fact);
+   }
+
+   /** @summary Returns alternating size - which defined by sz1 variable */
+   getAltSize(sz1, h) {
+      if (!sz1) sz1 = this.size ;
+      return Math.round(sz1 >= 1 ? sz1 : sz1 * h);
+   }
+
+   /** @summary Change text font from GED */
+   setGedFont(value) {
+      let v = parseInt(value);
+      if ((v > 0) && (v < 17))
+         this.font = v*10 + (this.font % 10);
+      return this.font;
+   }
+
+} // class TAttTextHandler
 
 /**
  * @summary Painter class for ROOT objects
@@ -11598,6 +11712,29 @@ class ObjectPainter extends BasePainter {
          handler.setArgs(args);
 
       if (args.std) this.lineatt = handler;
+      return handler;
+   }
+
+   /** @summary Creates text attributes object.
+     * @param {object} args - either TAttText or see constructor arguments of {@link TAttTextHandler}
+     * @protected */
+   createAttText(args) {
+      if (!isObject(args))
+         args = { std: true };
+      else if (args.fTextFont !== undefined && args.fTextSize !== undefined && args.fTextSize !== undefined)
+         args = { attr: args, std: false };
+
+      if (args.std === undefined) args.std = true;
+      if (args.painter === undefined) args.painter = this;
+
+      let handler = args.std ? this.textatt : null;
+
+      if (!handler)
+         handler = new TAttTextHandler(args);
+      else if (!handler.changed || args.force)
+         handler.setArgs(args);
+
+      if (args.std) this.textatt = handler;
       return handler;
    }
 
@@ -12377,7 +12514,7 @@ class ObjectPainter extends BasePainter {
    }
 
    /** @summary Provide projection areas
-     * @param kind - 'X', 'Y' or ''
+     * @param kind - 'X', 'Y', 'XY' or ''
      * @private */
    async provideSpecialDrawArea(kind) {
       if (kind == this._special_draw_area)
@@ -12389,13 +12526,15 @@ class ObjectPainter extends BasePainter {
       });
    }
 
-   /** @summary Provide projection areas
-     * @param kind - 'X', 'Y' or ''
+   /** @summary Draw in special projection areas
+     * @param obj - object to draw
+     * @param opt - draw option
+     * @param kind - '', 'X', 'Y'
      * @private */
-   async drawInSpecialArea(obj, opt) {
+   async drawInSpecialArea(obj, opt, kind) {
       let canp = this.getCanvPainter();
       if (this._special_draw_area && isFunc(canp?.drawProjection))
-         return canp.drawProjection(this._special_draw_area, obj, opt);
+         return canp.drawProjection(kind || this._special_draw_area, obj, opt);
 
       return false;
    }
@@ -60072,9 +60211,9 @@ class TAxisPainter extends ObjectPainter {
       this.lineatt.not_standard = true;
 
       if (!is_gaxis || (this.name === 'zaxis')) {
-         axis_g = layer.select('.' + this.name + '_container');
+         axis_g = layer.select(`.${this.name}_container`);
          if (axis_g.empty())
-            axis_g = layer.append('svg:g').attr('class',this.name + '_container');
+            axis_g = layer.append('svg:g').attr('class', `${this.name}_container`);
          else
             axis_g.selectAll('*').remove();
       }
@@ -60201,6 +60340,16 @@ class TAxisPainter extends ObjectPainter {
             title_g.attr('transform', makeTranslate(title_shift_x, title_shift_y))
                    .property('shift_x', title_shift_x)
                    .property('shift_y', title_shift_y);
+         }
+
+         if (is_gaxis && !this.embedded && !isBatchMode()) {
+            this.draw_g.on('click', evnt => {
+               let pp = this.getPadPainter();
+               if (!pp) return;
+               evnt.preventDefault();
+               let m = pointer(evnt, pp.getPadSvg().node());
+               pp.selectObjectPainter(this, { x: m[0], y: m[1] });
+            });
          }
 
          return this;
@@ -62473,12 +62622,13 @@ function tryOpenOpenUI(sources, args) {
    // use nojQuery while we are already load jquery and jquery-ui, later one can use directly sap-ui-core.js
 
    // this is location of openui5 scripts when working with THttpServer or when scripts are installed inside JSROOT
-   element.setAttribute('src', src + 'resources/sap-ui-core.js'); // latest openui5 version
+   element.setAttribute('src', src + (args.ui5dbg ? 'resources/sap-ui-core-dbg.js' : 'resources/sap-ui-core.js')); // latest openui5 version
 
    element.setAttribute('data-sap-ui-libs', args.openui5libs ?? 'sap.m, sap.ui.layout, sap.ui.unified, sap.ui.commons');
 
    element.setAttribute('data-sap-ui-theme', args.openui5theme || 'sap_belize');
    element.setAttribute('data-sap-ui-compatVersion', 'edge');
+   element.setAttribute('data-sap-ui-async', 'true');
    // element.setAttribute('data-sap-ui-bindingSyntax', 'complex');
 
    element.setAttribute('data-sap-ui-preload', 'async'); // '' to disable Component-preload.js
@@ -62531,10 +62681,14 @@ async function loadOpenui5(args) {
          case 'jsroot': openui5_sources.push(openui5_root); openui5_root = ''; break;
          default: openui5_sources.push(args.openui5src); break;
       }
+   } else if (args.ui5dbg) {
+      openui5_root = ''; // exclude ROOT version in debug mode
    }
 
-   if (openui5_root && (openui5_sources.indexOf(openui5_root) < 0)) openui5_sources.push(openui5_root);
-   if (openui5_dflt && (openui5_sources.indexOf(openui5_dflt) < 0)) openui5_sources.push(openui5_dflt);
+   if (openui5_root && (openui5_sources.indexOf(openui5_root) < 0))
+      openui5_sources.push(openui5_root);
+   if (openui5_dflt && (openui5_sources.indexOf(openui5_dflt) < 0))
+      openui5_sources.push(openui5_dflt);
 
    return new Promise((resolve, reject) => {
 
@@ -67303,7 +67457,7 @@ class GridDisplay extends MDIDisplay {
       this.simple_layout = false;
 
       let dom = this.selectDom();
-      dom.style('overflow','hidden');
+      dom.style('overflow', 'hidden');
 
       if (kind === 'simple') {
          this.simple_layout = true;
@@ -67312,9 +67466,17 @@ class GridDisplay extends MDIDisplay {
          return;
       }
 
-      let num = 2, arr = undefined, sizes = undefined;
+      let num = 2, arr, sizes, chld_sizes;
 
-      if ((kind.indexOf('grid') == 0) || kind2) {
+      if (kind == 'projxy') {
+         this.vertical = false;
+         this.use_separarators = true;
+         arr = [2, 2];
+         sizes = [1,3];
+         chld_sizes = [[3,1], [3,1]];
+         kind = '';
+         this.match_sizes = true;
+      } else if ((kind.indexOf('grid') == 0) || kind2) {
          if (kind2) kind = kind + 'x' + kind2;
                else kind = kind.slice(4).trim();
          this.use_separarators = false;
@@ -67380,20 +67542,23 @@ class GridDisplay extends MDIDisplay {
          }
       }
 
-      if (sizes && (sizes.length!==num)) sizes = undefined;
+      if (sizes?.length !== num)
+         sizes = undefined;
+      if (chld_sizes?.length !== num)
+         chld_sizes = undefined;
 
       if (!this.simple_layout) {
          injectStyle(
             `.jsroot_vline:after { content:""; position: absolute; top: 0; bottom: 0; left: 50%; border-left: 1px dotted #ff0000; }
              .jsroot_hline:after { content:""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px dotted #ff0000; }
              .jsroot_separator { pointer-events: all; border: 0; margin: 0; padding: 0; }`, dom.node(), 'grid_style');
-         this.createGroup(this, dom, num, arr, sizes);
+         this.createGroup(this, dom, num, arr, sizes, chld_sizes);
       }
    }
 
    /** @summary Create frames group
      * @private */
-   createGroup(handle, main, num, childs, sizes) {
+   createGroup(handle, main, num, childs, sizes, childs_sizes) {
 
       if (!sizes) sizes = new Array(num);
       let sum1 = 0, sum2 = 0;
@@ -67406,20 +67571,25 @@ class GridDisplay extends MDIDisplay {
       }
 
       for (let cnt = 0; cnt < num; ++cnt) {
-         let group = { id: cnt, drawid: -1, position: 0, size: sizes[cnt] };
+         let group = { id: cnt, drawid: -1, position: 0, size: sizes[cnt], parent: handle };
          if (cnt > 0) group.position = handle.groups[cnt-1].position + handle.groups[cnt-1].size;
          group.position0 = group.position;
 
-         if (!childs || !childs[cnt] || childs[cnt]<2) group.drawid = this.framecnt++;
+         if (!childs || !childs[cnt] || childs[cnt] < 2)
+            group.drawid = this.framecnt++;
 
          handle.groups.push(group);
 
          let elem = main.append('div').attr('groupid', group.id);
 
+         // remember HTML node only when need to match sizes of different groups
+         if (handle.match_sizes)
+            group.node = elem.node();
+
          if (handle.vertical)
-            elem.style('float', 'bottom').style('height',group.size+'%').style('width','100%');
+            elem.style('float', 'bottom').style('height', group.size.toFixed(2)+'%').style('width','100%');
          else
-            elem.style('float', 'left').style('width',group.size+'%').style('height','100%');
+            elem.style('float', 'left').style('width', group.size.toFixed(2)+'%').style('height','100%');
 
          if (group.drawid >= 0) {
             elem.classed('jsroot_newgrid', true);
@@ -67429,15 +67599,15 @@ class GridDisplay extends MDIDisplay {
             elem.style('display','flex').style('flex-direction', handle.vertical ? 'row' : 'column');
          }
 
-         if (childs && (childs[cnt]>1)) {
+         if (childs && (childs[cnt] > 1)) {
             group.vertical = !handle.vertical;
             group.groups = [];
             elem.style('overflow','hidden');
-            this.createGroup(group, elem, childs[cnt]);
+            this.createGroup(group, elem, childs[cnt], null, childs_sizes ? childs_sizes[cnt] : null);
          }
       }
 
-      if (this.use_separarators && this.createSeparator)
+      if (this.use_separarators && isFunc(this.createSeparator))
          for (let cnt = 1; cnt < num; ++cnt)
             this.createSeparator(handle, main, handle.groups[cnt]);
    }
@@ -67445,31 +67615,36 @@ class GridDisplay extends MDIDisplay {
    /** @summary Handle interactive sepearator movement
      * @private */
    handleSeparator(elem, action) {
-      let separ = select(elem),
-          parent = elem.parentNode,
-          handle = separ.property('handle'),
-          id = separ.property('separator_id'),
-          group = handle.groups[id];
 
-       const findGroup = grid => {
-         let chld = parent.firstChild;
+      const findGroup = (node, grid) => {
+         let chld = node?.firstChild;
          while (chld) {
             if (chld.getAttribute('groupid') == grid)
                return select(chld);
             chld = chld.nextSibling;
          }
          // should never happen, but keep it here like
-         return select(parent).select(`[groupid='${grid}']`);
-       }, setGroupSize = grid => {
-          let name = handle.vertical ? 'height' : 'width',
-              size = handle.groups[grid].size+'%';
-          findGroup(grid).style(name, size)
-                         .selectAll('.jsroot_separator').style(name, size);
-       }, resizeGroup = grid => {
-          let sel = findGroup(grid);
-          if (!sel.classed('jsroot_newgrid')) sel = sel.select('.jsroot_newgrid');
-          sel.each(function() { resize(this); });
-       };
+         return select(node).select(`[groupid='${grid}']`);
+      }, setGroupSize = (h, node, grid) => {
+         let name = h.vertical ? 'height' : 'width',
+             size = h.groups[grid].size.toFixed(2)+'%';
+         findGroup(node, grid).style(name, size)
+                              .selectAll('.jsroot_separator').style(name, size);
+      }, resizeGroup = (node, grid) => {
+         let sel = findGroup(node, grid);
+         if (!sel.classed('jsroot_newgrid'))
+            sel = sel.select('.jsroot_newgrid');
+         sel.each(function() { resize(this); });
+      }, posSepar = (h, group, separ) => {
+         separ.style(h.vertical ? 'top' : 'left', `calc(${group.position.toFixed(2)}% - 2px)`);
+      };
+
+      let separ = select(elem),
+          parent = elem.parentNode,
+          handle = separ.property('handle'),
+          id = separ.property('separator_id'),
+          group = handle.groups[id],
+          needResize = false, needSetSize = false;
 
       if (action == 'start') {
          group.startpos = group.position;
@@ -67478,43 +67653,73 @@ class GridDisplay extends MDIDisplay {
       }
 
       if (action == 'end') {
-         if (Math.abs(group.startpos - group.position) >= 0.5) {
-            resizeGroup(id-1);
-            resizeGroup(id);
-          }
-          return;
-      }
-
-      let pos;
-      if (action == 'restore') {
-          pos = group.position0;
-      } else if (handle.vertical) {
-          group.acc_drag += action.dy;
-          pos = group.startpos + ((group.acc_drag + 2) / parent.clientHeight) * 100;
+         if (Math.abs(group.startpos - group.position) < 0.5)
+            return;
+         needResize = true;
       } else {
-          group.acc_drag += action.dx;
-          pos = group.startpos + ((group.acc_drag + 2) / parent.clientWidth) * 100;
+
+         let pos;
+         if (action == 'restore') {
+             pos = group.position0;
+         } else if (handle.vertical) {
+             group.acc_drag += action.dy;
+             pos = group.startpos + ((group.acc_drag + 2) / parent.clientHeight) * 100;
+         } else {
+             group.acc_drag += action.dx;
+             pos = group.startpos + ((group.acc_drag + 2) / parent.clientWidth) * 100;
+         }
+
+         let diff = group.position - pos;
+
+         if (Math.abs(diff) < 0.3) return; // if no significant change, do nothing
+
+         // do not change if size too small
+         if (Math.min(handle.groups[id-1].size - diff, group.size+diff) < 3) return;
+
+         handle.groups[id-1].size -= diff;
+         group.size += diff;
+         group.position = pos;
+
+         posSepar(handle, group, separ);
+
+         needSetSize = true;
+         needResize = (action == 'restore');
       }
 
-      let diff = group.position - pos;
+      if (needSetSize) {
+         setGroupSize(handle, parent, id-1);
+         setGroupSize(handle, parent, id);
+      }
 
-      if (Math.abs(diff) < 0.3) return; // if no significant change, do nothing
+      if (needResize) {
+         resizeGroup(parent, id-1);
+         resizeGroup(parent, id);
+      }
 
-      // do not change if size too small
-      if (Math.min(handle.groups[id-1].size-diff, group.size+diff) < 3) return;
+      // now handling match of the sizes
+      if (!handle.parent?.match_sizes)
+         return;
 
-      handle.groups[id-1].size -= diff;
-      group.size += diff;
-      group.position = pos;
-
-      separ.style(handle.vertical ? 'top' : 'left', `calc(${pos}% - 2px)`);
-
-      setGroupSize(id-1);
-      setGroupSize(id);
-
-      if (action == 'restore') {
-          resizeGroup(id-1);
-          resizeGroup(id);
+      for (let k = 0; k < handle.parent.groups.length; ++k) {
+         let hh = handle.parent.groups[k];
+         if ((hh === handle) || !hh.node) continue;
+         hh.groups[id].size = handle.groups[id].size;
+         hh.groups[id].position = handle.groups[id].position;
+         hh.groups[id-1].size = handle.groups[id-1].size;
+         hh.groups[id-1].position = handle.groups[id-1].position;
+         if (needSetSize) {
+            select(hh.node).selectAll('.jsroot_separator').each(function() {
+               let s = select(this);
+               if (s.property('separator_id') === id)
+                  posSepar(hh, hh.groups[id], s);
+            });
+            setGroupSize(hh, hh.node, id-1);
+            setGroupSize(hh, hh.node, id);
+         }
+         if (needResize) {
+            resizeGroup(hh.node, id-1);
+            resizeGroup(hh.node, id);
+          }
       }
    }
 
@@ -67528,8 +67733,8 @@ class GridDisplay extends MDIDisplay {
            .property('handle', handle)
            .property('separator_id', group.id)
            .style('position', 'absolute')
-           .style(handle.vertical ? 'top' : 'left', `calc(${group.position}% - 2px)`)
-           .style(handle.vertical ? 'width' : 'height', (handle.size || 100)+'%')
+           .style(handle.vertical ? 'top' : 'left', `calc(${group.position.toFixed(2)}% - 2px)`)
+           .style(handle.vertical ? 'width' : 'height', (handle.size?.toFixed(2) || 100)+'%')
            .style(handle.vertical ? 'height' : 'width', '5px')
            .style('cursor', handle.vertical ? 'ns-resize' : 'ew-resize');
 
@@ -67542,7 +67747,7 @@ class GridDisplay extends MDIDisplay {
 
       // need to get touches events handling in drag
       if (browser$1.touches && !main.on('touchmove'))
-         main.on('touchmove', function() { });
+         main.on('touchmove', function() {});
    }
 
 
@@ -69213,17 +69418,19 @@ class TPadPainter extends ObjectPainter {
 
       if (check_resize > 0) {
 
-         if (this._fixed_size) return check_resize > 1; // flag used to force re-drawing of all subpads
+         if (this._fixed_size)
+            return check_resize > 1; // flag used to force re-drawing of all subpads
 
          svg = this.getCanvSvg();
-
-         if (svg.empty()) return false;
+         if (svg.empty())
+            return false;
 
          factor = svg.property('height_factor');
 
          rect = this.testMainResize(check_resize, null, factor);
 
-         if (!rect.changed) return false;
+         if (!rect.changed && (check_resize == 1))
+            return false;
 
          if (!isBatchMode())
             btns = this.getLayerSvg('btns_layer', this.this_pad_name);
@@ -69427,13 +69634,13 @@ class TPadPainter extends ObjectPainter {
           h = Math.round(this.pad.fAbsHNDC * height),
           x = Math.round(this.pad.fAbsXlowNDC * width),
           y = Math.round(height * (1 - this.pad.fAbsYlowNDC)) - h,
-          svg_pad = null, svg_rect = null, btns = null;
+          svg_pad, svg_border, btns;
 
       if (pad_enlarged === this.pad) { w = width; h = height; x = y = 0; }
 
       if (only_resize) {
          svg_pad = this.svg_this_pad();
-         svg_rect = svg_pad.select('.root_pad_border');
+         svg_border = svg_pad.select('.root_pad_border');
          if (!isBatchMode())
             btns = this.getLayerSvg('btns_layer', this.this_pad_name);
       } else {
@@ -69448,14 +69655,14 @@ class TPadPainter extends ObjectPainter {
 
          // need to check attributes directly while attributes objects will be created later
          if (!isBatchMode() || (this.pad.fFillStyle > 0) || ((this.pad.fLineStyle > 0) && (this.pad.fLineColor > 0)))
-            svg_rect = svg_pad.append('svg:path').attr('class', 'root_pad_border');
+            svg_border = svg_pad.append('svg:path').attr('class', 'root_pad_border');
 
          if (!isBatchMode())
-            svg_rect.style('pointer-events', 'visibleFill') // get events also for not visible rect
-                    .on('dblclick', evnt => this.enlargePad(evnt, true))
-                    .on('click', () => this.selectObjectPainter())
-                    .on('mouseenter', () => this.showObjectStatus())
-                    .on('contextmenu', settings.ContextMenu ? evnt => this.padContextMenu(evnt) : null);
+            svg_border.style('pointer-events', 'visibleFill') // get events also for not visible rect
+                      .on('dblclick', evnt => this.enlargePad(evnt, true))
+                      .on('click', () => this.selectObjectPainter())
+                      .on('mouseenter', () => this.showObjectStatus())
+                      .on('contextmenu', settings.ContextMenu ? evnt => this.padContextMenu(evnt) : null);
 
          svg_pad.append('svg:g').attr('class','primitives_layer');
          if (!isBatchMode())
@@ -69466,7 +69673,7 @@ class TPadPainter extends ObjectPainter {
       }
 
       this.createAttFill({ attr: this.pad });
-      this.createAttLine({ attr: this.pad, color0: this.pad.fBorderMode == 0 ? 'none' : '' });
+      this.createAttLine({ attr: this.pad, color0: !this.pad.fBorderMode ? 'none' : '' });
 
       svg_pad.style('display', pad_visible ? null : 'none')
              .attr('viewBox', `0 0 ${w} ${h}`) // due to svg
@@ -69485,12 +69692,36 @@ class TPadPainter extends ObjectPainter {
       this._pad_width = w;
       this._pad_height = h;
 
-      if (svg_rect) {
-         svg_rect.attr('d', `M0,0H${w}V${h}H0Z`)
-                 .call(this.fillatt.func)
-                 .call(this.lineatt.func);
+      if (svg_border) {
+         svg_border.attr('d', `M0,0H${w}V${h}H0Z`)
+                   .call(this.fillatt.func)
+                   .call(this.lineatt.func);
+         this.drawActiveBorder(svg_border);
 
-         this.drawActiveBorder(svg_rect);
+         let svg_border1 = svg_pad.select('.root_pad_border1'),
+             svg_border2 = svg_pad.select('.root_pad_border2');
+
+         if (this.pad.fBorderMode && this.pad.fBorderSize) {
+            let pw = this.pad.fBorderSize, ph = this.pad.fBorderSize,
+                side1 = `M0,0h${w}l${-pw},${ph}h${2*pw-w}v${h-2*ph}l${-pw},${ph}z`,
+                side2 = `M${w},${h}v${-h}l${-pw},${ph}v${h-2*ph}h${2*pw-w}l${-pw},${ph}z`;
+
+            if (svg_border2.empty())
+               svg_border2 = svg_pad.insert('svg:path', '.primitives_layer').attr('class', 'root_pad_border2');
+            if (svg_border1.empty())
+               svg_border1 = svg_pad.insert('svg:path', '.primitives_layer').attr('class', 'root_pad_border1');
+
+            svg_border1.attr('d', this.pad.fBorderMode > 0 ? side1 : side2)
+                       .call(this.fillatt.func)
+                       .style('fill', rgb(this.fillatt.color).brighter(0.5).formatHex());
+            svg_border2.attr('d', this.pad.fBorderMode > 0 ? side2 : side1)
+                       .call(this.fillatt.func)
+                       .style('fill', rgb(this.fillatt.color).darker(0.5).formatHex());
+         } else {
+            svg_border1.remove();
+            svg_border2.remove();
+         }
+
       }
 
       this._fast_drawing = settings.SmallPad && ((w * (1 - this.pad.fLeftMargin-this.pad.fRightMargin) < settings.SmallPad.width) || (h * (1 - this.pad.fBottomMargin - this.pad.fTopMargin) < settings.SmallPad.height));
@@ -69815,22 +70046,25 @@ class TPadPainter extends ObjectPainter {
             this.interactiveRedraw('pad', arg.slice(1));
          }
 
-         menu.addchk(this.pad.fGridx, 'Grid x', (this.pad.fGridx ? '0' : '1') + 'fGridx', SetPadField);
-         menu.addchk(this.pad.fGridy, 'Grid y', (this.pad.fGridy ? '0' : '1') + 'fGridy', SetPadField);
+         menu.addchk(this.pad?.fGridx, 'Grid x', (this.pad?.fGridx ? '0' : '1') + 'fGridx', SetPadField);
+         menu.addchk(this.pad?.fGridy, 'Grid y', (this.pad?.fGridy ? '0' : '1') + 'fGridy', SetPadField);
          menu.add('sub:Ticks x');
-         menu.addchk(this.pad.fTickx == 0, 'normal', '0fTickx', SetPadField);
-         menu.addchk(this.pad.fTickx == 1, 'ticks on both sides', '1fTickx', SetPadField);
-         menu.addchk(this.pad.fTickx == 2, 'labels on both sides', '2fTickx', SetPadField);
+         menu.addchk(this.pad?.fTickx == 0, 'normal', '0fTickx', SetPadField);
+         menu.addchk(this.pad?.fTickx == 1, 'ticks on both sides', '1fTickx', SetPadField);
+         menu.addchk(this.pad?.fTickx == 2, 'labels on both sides', '2fTickx', SetPadField);
          menu.add('endsub:');
          menu.add('sub:Ticks y');
-         menu.addchk(this.pad.fTicky == 0, 'normal', '0fTicky', SetPadField);
-         menu.addchk(this.pad.fTicky == 1, 'ticks on both sides', '1fTicky', SetPadField);
-         menu.addchk(this.pad.fTicky == 2, 'labels on both sides', '2fTicky', SetPadField);
+         menu.addchk(this.pad?.fTicky == 0, 'normal', '0fTicky', SetPadField);
+         menu.addchk(this.pad?.fTicky == 1, 'ticks on both sides', '1fTicky', SetPadField);
+         menu.addchk(this.pad?.fTicky == 2, 'labels on both sides', '2fTicky', SetPadField);
          menu.add('endsub:');
 
          menu.addAttributesMenu(this);
          menu.add('Save to gStyle', function() {
-            if (this.fillatt) this.fillatt.saveToStyle(this.iscan ? 'fCanvasColor' : 'fPadColor');
+            if (!this.pad)
+               return;
+            if (this.fillatt)
+               this.fillatt.saveToStyle(this.iscan ? 'fCanvasColor' : 'fPadColor');
             gStyle.fPadGridX = this.pad.fGridX;
             gStyle.fPadGridY = this.pad.fGridX;
             gStyle.fPadTickX = this.pad.fTickx;
@@ -71058,12 +71292,16 @@ class TCanvasPainter extends TPadPainter {
 
       let origin = this.selectDom('origin'),
           sidebar = origin.select('.side_panel'),
-          main = this.selectDom(), lst = [];
+          sidebar2 = origin.select('.side_panel2'),
+          main = this.selectDom(), lst = [], force;
 
       while (main.node().firstChild)
          lst.push(main.node().removeChild(main.node().firstChild));
 
-      if (!sidebar.empty()) cleanup(sidebar.node());
+      if (!sidebar.empty())
+         cleanup(sidebar.node());
+      if (!sidebar2.empty())
+         cleanup(sidebar2.node());
 
       this.setLayoutKind('simple'); // restore defaults
       origin.html(''); // cleanup origin
@@ -71073,6 +71311,7 @@ class TCanvasPainter extends TPadPainter {
          for (let k = 0; k < lst.length; ++k)
             main.node().appendChild(lst[k]);
          this.setLayoutKind(layout_kind);
+         force = true;
       } else {
 
          let grid = new GridDisplay(origin.node(), layout_kind);
@@ -71081,10 +71320,19 @@ class TCanvasPainter extends TPadPainter {
             mainid = (layout_kind.indexOf('vert') == 0) ? 0 : 1;
 
          main = select(grid.getGridFrame(mainid));
-         sidebar = select(grid.getGridFrame(1 - mainid));
-
          main.classed('central_panel', true).style('position', 'relative');
-         sidebar.classed('side_panel', true).style('position', 'relative');
+
+         if (mainid == 2) {
+            // left panel for Y
+            sidebar = select(grid.getGridFrame(0));
+            sidebar.classed('side_panel2', true).style('position', 'relative');
+            // bottom panel for X
+            sidebar = select(grid.getGridFrame(3));
+            sidebar.classed('side_panel', true).style('position', 'relative');
+         } else {
+            sidebar = select(grid.getGridFrame(1 - mainid));
+            sidebar.classed('side_panel', true).style('position', 'relative');
+         }
 
          // now append all childs to the new main
          for (let k = 0; k < lst.length; ++k)
@@ -71097,7 +71345,7 @@ class TCanvasPainter extends TPadPainter {
       }
 
       // resize main drawing and let draw extras
-      resize(main.node());
+      resize(main.node(), force);
       return true;
    }
 
@@ -71107,7 +71355,7 @@ class TCanvasPainter extends TPadPainter {
    async toggleProjection(kind) {
       delete this.proj_painter;
 
-      if (kind) this.proj_painter = 1; // just indicator that drawing can be preformed
+      if (kind) this.proj_painter = { 'X': false, 'Y': false }; // just indicator that drawing can be preformed
 
       if (isFunc(this.showUI5ProjectionArea))
          return this.showUI5ProjectionArea(kind);
@@ -71115,6 +71363,7 @@ class TCanvasPainter extends TPadPainter {
       let layout = 'simple', mainid;
 
       switch(kind) {
+         case 'XY': layout = 'projxy'; mainid = 2; break;
          case 'X':
          case 'bottom': layout = 'vert2_31'; mainid = 0; break;
          case 'Y':
@@ -71133,9 +71382,11 @@ class TCanvasPainter extends TPadPainter {
       if (!this.proj_painter)
          return false; // ignore drawing if projection not configured
 
-      if (hopt === undefined) hopt = 'hist';
+      if (hopt === undefined)
+         hopt = 'hist';
+      if (!kind) kind = 'X';
 
-      if (this.proj_painter === 1) {
+      if (!this.proj_painter[kind]) {
 
          let canv = create$1(clTCanvas),
              pad = this.pad,
@@ -71160,14 +71411,14 @@ class TCanvasPainter extends TPadPainter {
          canv.fPrimitives.Add(hist, hopt);
 
          let promise = this.drawInUI5ProjectionArea
-                       ? this.drawInUI5ProjectionArea(canv, drawopt)
-                       : this.drawInSidePanel(canv, drawopt);
+                       ? this.drawInUI5ProjectionArea(canv, drawopt, kind)
+                       : this.drawInSidePanel(canv, drawopt, kind);
 
-         return promise.then(painter => { this.proj_painter = painter; return painter; });
+         return promise.then(painter => { this.proj_painter[kind] = painter; return painter; });
       }
 
-      this.proj_painter.getMainPainter()?.updateObject(hist, hopt);
-      return this.proj_painter.redrawPad();
+      this.proj_painter[kind].getMainPainter()?.updateObject(hist, hopt);
+      return this.proj_painter[kind].redrawPad();
    }
 
    /** @summary Checks if canvas shown inside ui5 widget
@@ -71181,8 +71432,10 @@ class TCanvasPainter extends TPadPainter {
 
    /** @summary Draw in side panel
      * @private */
-   async drawInSidePanel(canv, opt) {
-      let side = this.selectDom('origin').select('.side_panel');
+   async drawInSidePanel(canv, opt, kind) {
+      let sel = ((this.getLayoutKind() == 'projxy') && (kind == 'Y')) ? '.side_panel2' : '.side_panel',
+          side = this.selectDom('origin').select(sel);
+
       return side.empty() ? null : this.drawObject(side.node(), canv, opt);
    }
 
@@ -71198,7 +71451,7 @@ class TCanvasPainter extends TPadPainter {
    saveCanvasAsFile(fname) {
       let pnt = fname.indexOf('.');
       this.createImage(fname.slice(pnt+1))
-          .then(res => this.sendWebsocket('SAVE:' + fname + ':' + res));
+          .then(res => this.sendWebsocket(`SAVE:${fname}:${res}`));
    }
 
    /** @summary Send command to server to save canvas with specified name
@@ -71260,6 +71513,25 @@ class TCanvasPainter extends TPadPainter {
       this._websocket.connect();
    }
 
+   /** @summary set, test or reset timeout of specified name
+     * @desc Used to prevent overloading of websocket for specific function */
+   websocketTimeout(name, tm) {
+      if (!this._websocket)
+         return;
+      if (!this._websocket._tmouts)
+         this._websocket._tmouts = {};
+
+      let handle = this._websocket._tmouts[name];
+      if (tm === undefined)
+         return handle !== undefined;
+
+      if (tm == 'reset') {
+         if (handle) { clearTimeout(handle); delete this._websocket._tmouts[name]; }
+      } else if (!handle && Number.isInteger(tm)) {
+         this._websocket._tmouts[name] = setTimeout(() => { delete this._websocket._tmouts[name]; }, tm);
+      }
+   }
+
    /** @summary Hanler for websocket open event
      * @private */
    onWebsocketOpened(/*handle*/) {
@@ -71276,7 +71548,7 @@ class TCanvasPainter extends TPadPainter {
    /** @summary Handle websocket messages
      * @private */
    onWebsocketMsg(handle, msg) {
-      console.log(`GET MSG len:${msg.length} ${msg.slice(0,60)}`);
+      // console.log(`GET MSG len:${msg.length} ${msg.slice(0,60)}`);
 
       if (msg == 'CLOSE') {
          this.onWebsocketClosed();
@@ -71320,6 +71592,7 @@ class TCanvasPainter extends TPadPainter {
       } else if ((msg.slice(0,7) == 'DXPROJ:') || (msg.slice(0,7) == 'DYPROJ:')) {
          let kind = msg[1],
              hist = parse(msg.slice(7));
+         this.websocketTimeout(`proj${kind}`, 'reset');
          this.drawProjection(kind, hist);
       } else if (msg.slice(0,5) == 'SHOW:') {
          let that = msg.slice(5),
@@ -71507,7 +71780,7 @@ class TCanvasPainter extends TPadPainter {
       this.showSection('ToolTips', this.pad.TestBit(TCanvasStatusBits.kShowToolTips) || this._highlight_connect);
    }
 
-   /** @summary Handle highlight in canvas - delver information to server
+   /** @summary Handle highlight in canvas - deliver information to server
      * @private */
    processHighlightConnect(hints) {
       if (!hints || hints.length == 0 || !this._highlight_connect ||
@@ -71991,6 +72264,8 @@ class TPavePainter extends ObjectPainter {
 
       this.createAttFill({ attr: pt });
 
+      let promise, interactive_element;
+
       if (pt._typename == clTDiamond) {
          let h2 = Math.round(height/2), w2 = Math.round(width/2),
              dpath = `l${w2},${-h2}l${w2},${h2}l${-w2},${h2}z`;
@@ -72002,60 +72277,60 @@ class TPavePainter extends ObjectPainter {
                  .style('stroke', this.getColor(pt.fShadowColor))
                  .style('stroke-width', '1px');
 
-         this.draw_g.append('svg:path')
-             .attr('d', 'M0,'+h2 +dpath)
-             .call(this.fillatt.func)
-             .call(this.lineatt.func);
+         interactive_element = this.draw_g.append('svg:path')
+                                   .attr('d', 'M0,'+h2 +dpath)
+                                   .call(this.fillatt.func)
+                                   .call(this.lineatt.func);
 
          let text_g = this.draw_g.append('svg:g')
-                                 .attr('transform', makeTranslate(Math.round(width/4),Math.round(height/4)));
+                                 .attr('transform', makeTranslate(Math.round(width/4), Math.round(height/4)));
 
-         return this.drawPaveText(w2, h2, arg, text_g);
-      }
+         promise = this.drawPaveText(w2, h2, arg, text_g);
+      } else {
 
-      // add shadow decoration before main rect
-      if ((brd > 1) && (pt.fShadowColor > 0) && !pt.fNpaves && (dx || dy)) {
-         let spath = '', scol = this.getColor(pt.fShadowColor);
-         if (this.fillatt.empty()) {
-            if ((dx < 0) && (dy < 0))
-               spath = `M0,0v${height-brd}h${-brd}v${-height}h${width}v${brd}`;
-            else // ((dx < 0) && (dy > 0))
-               spath = `M0,${height}v${brd-height}h${-brd}v${height}h${width}v${-brd}`;
-         } else {
-            // when main is filled, one also can use fill for shadow to avoid complexity
-            spath = `M${dx*brd},${dy*brd}v${height}h${width}v${-height}`;
-         }
-         this.draw_g.append('svg:path')
-                    .attr('d', spath + 'z')
-                    .style('fill', scol)
-                    .style('stroke', scol)
-                    .style('stroke-width', '1px');
-      }
-
-      if (pt.fNpaves)
-         for (let n = pt.fNpaves-1; n > 0; --n)
+         // add shadow decoration before main rect
+         if ((brd > 1) && (pt.fShadowColor > 0) && !pt.fNpaves && (dx || dy)) {
+            let spath = '', scol = this.getColor(pt.fShadowColor);
+            if (this.fillatt.empty()) {
+               if ((dx < 0) && (dy < 0))
+                  spath = `M0,0v${height-brd}h${-brd}v${-height}h${width}v${brd}`;
+               else // ((dx < 0) && (dy > 0))
+                  spath = `M0,${height}v${brd-height}h${-brd}v${height}h${width}v${-brd}`;
+            } else {
+               // when main is filled, one also can use fill for shadow to avoid complexity
+               spath = `M${dx*brd},${dy*brd}v${height}h${width}v${-height}`;
+            }
             this.draw_g.append('svg:path')
-               .attr('d', `M${dx*4*n},${dy*4*n}h${width}v${height}h${-width}z`)
-               .call(this.fillatt.func)
-               .call(this.lineatt.func);
+                       .attr('d', spath + 'z')
+                       .style('fill', scol)
+                       .style('stroke', scol)
+                       .style('stroke-width', '1px');
+         }
 
-      let rect;
-      if (!isBatchMode() || !this.fillatt.empty() || !this.lineatt.empty())
-           rect = this.draw_g.append('svg:path')
-                      .attr('d', `M0,0H${width}V${height}H0Z`)
-                      .call(this.fillatt.func)
-                      .call(this.lineatt.func);
+         if (pt.fNpaves)
+            for (let n = pt.fNpaves-1; n > 0; --n)
+               this.draw_g.append('svg:path')
+                  .attr('d', `M${dx*4*n},${dy*4*n}h${width}v${height}h${-width}z`)
+                  .call(this.fillatt.func)
+                  .call(this.lineatt.func);
 
-      let promise = isFunc(this.paveDrawFunc) ? this.paveDrawFunc(width, height, arg) : Promise.resolve(true);
+         if (!isBatchMode() || !this.fillatt.empty() || !this.lineatt.empty())
+            interactive_element = this.draw_g.append('svg:path')
+                                             .attr('d', `M0,0H${width}V${height}H0Z`)
+                                             .call(this.fillatt.func)
+                                             .call(this.lineatt.func);
+
+         promise = isFunc(this.paveDrawFunc) ? this.paveDrawFunc(width, height, arg) : Promise.resolve(true);
+      }
 
       return promise.then(() => {
 
          if (isBatchMode() || (pt._typename === clTPave)) return this;
 
          // here all kind of interactive settings
-         if (rect)
-            rect.style('pointer-events', 'visibleFill')
-                .on('mouseenter', () => this.showObjectStatus());
+         if (interactive_element)
+            interactive_element.style('pointer-events', 'visibleFill')
+                               .on('mouseenter', () => this.showObjectStatus());
 
          addDragHandler(this, { obj: pt, x: this._pave_x, y: this._pave_y, width, height,
                                 minwidth: 10, minheight: 20, canselect: true,
@@ -72109,9 +72384,11 @@ class TPavePainter extends ObjectPainter {
 
       this.UseTextColor = true;
 
-      this.startTextDrawing(pave.fTextFont, height/1.2);
+      this.createAttText({ attr: pave });
 
-      this.drawText({ align: pave.fTextAlign, width, height, text: pave.fLabel, color: this.getColor(pave.fTextColor) });
+      this.startTextDrawing(this.textatt.font, height/1.2);
+
+      this.drawText(this.textatt.createArg({ width, height, text: pave.fLabel, norotate: true }));
 
       return this.finishTextDrawing();
    }
@@ -72120,7 +72397,6 @@ class TPavePainter extends ObjectPainter {
    drawPaveStats(width, height) {
 
       let pt = this.getObject(), lines = [], colors = [],
-          color0 = this.getColor(pt.fTextColor),
           first_stat = 0, num_cols = 0, maxlen = 0;
 
       // extract only text
@@ -72148,16 +72424,19 @@ class TPavePainter extends ObjectPainter {
       // for characters like 'p' or 'y' several more pixels required to stay in the box when drawn in last line
       let stepy = height / nlines, has_head = false, margin_x = pt.fMargin * width;
 
-      this.startTextDrawing(pt.fTextFont, height/(nlines * 1.2));
+
+      this.createAttText({ attr: pt });
+
+      this.startTextDrawing(this.textatt.font, height/(nlines * 1.2));
 
       this.UseTextColor = true;
 
       if (nlines == 1) {
-         this.drawText({ align: pt.fTextAlign, width, height, text: lines[0], color: color0, latex: 1 });
+         this.drawText(this.textatt.createArg({ width, height, text: lines[0], latex: 1, norotate: true }));
       } else
       for (let j = 0; j < nlines; ++j) {
          let y = j*stepy,
-             color = (colors[j] > 1) ? this.getColor(colors[j]) : color0;
+             color = (colors[j] > 1) ? this.getColor(colors[j]) : this.textatt.color;
 
          if (first_stat && (j >= first_stat)) {
             let parts = lines[j].split('|');
@@ -72217,7 +72496,6 @@ class TPavePainter extends ObjectPainter {
    drawPaveText(width, height, dummy_arg, text_g) {
 
       let pt = this.getObject(),
-          tcolor = this.getColor(pt.fTextColor),
           arr = pt?.fLines?.arr || [],
           nlines = arr.length,
           pp = this.getPadPainter(),
@@ -72228,11 +72506,11 @@ class TPavePainter extends ObjectPainter {
           stepy = height / (nlines || 1),
           max_font_size = 0;
 
+      this.createAttText({ attr: pt });
+
       // for single line (typically title) limit font size
-      if ((nlines == 1) && (pt.fTextSize > 0)) {
-         max_font_size = Math.round(pt.fTextSize * pad_height);
-         if (max_font_size < 3) max_font_size = 3;
-      }
+      if ((nlines == 1) && (this.textatt.size > 0))
+         max_font_size = Math.max(3, this.textatt.getSize(pad_height));
 
       if (!text_g) text_g = this.draw_g;
 
@@ -72252,26 +72530,26 @@ class TPavePainter extends ObjectPainter {
                       y = entry.fY ? (1 - entry.fY)*height : texty,
                       color = entry.fTextColor ? this.getColor(entry.fTextColor) : '';
                   if (!color) {
-                     color = tcolor;
+                     color = this.textatt.color;
                      this.UseTextColor = true;
                   }
 
                   let sub_g = text_g.append('svg:g');
 
-                  this.startTextDrawing(pt.fTextFont, (entry.fTextSize || pt.fTextSize) * pad_height, sub_g);
+                  this.startTextDrawing(this.textatt.font, this.textatt.getAltSize(entry.fTextSize, pad_height), sub_g);
 
-                  this.drawText({ align: entry.fTextAlign || pt.fTextAlign, x, y, text: entry.fTitle, color,
+                  this.drawText({ align: entry.fTextAlign || this.textatt.align, x, y, text: entry.fTitle, color,
                                   latex: (entry._typename == clTText) ? 0 : 1,  draw_g: sub_g, fast });
 
                   promises.push(this.finishTextDrawing(sub_g));
                } else {
                   // default position
                   if (num_default++ === 0)
-                     this.startTextDrawing(pt.fTextFont, height/(nlines * 1.2), text_g, max_font_size);
+                     this.startTextDrawing(this.textatt.font, height/(nlines * 1.2), text_g, max_font_size);
 
-                  let arg = { x: 0, y: 0, width, height, align: entry.fTextAlign || pt.fTextAlign,
+                  let arg = { x: 0, y: 0, width, height, align: entry.fTextAlign || this.textatt.align,
                               draw_g: text_g, latex: entry._typename == clTText ? 0 : 1,
-                              text: entry.fTitle, fast  };
+                              text: entry.fTitle, fast };
                   let halign = Math.floor(arg.align / 10);
                   // when horizontal align applied, just shift text, not change width to keep scaling
                   arg.x = (halign == 1) ? margin_x : (halign == 3 ? -margin_x : 0);
@@ -72280,9 +72558,9 @@ class TPavePainter extends ObjectPainter {
                      arg.y = texty;
                      arg.height = stepy;
                      if (entry.fTextColor) arg.color = this.getColor(entry.fTextColor);
-                     if (entry.fTextSize) arg.font_size = Math.round(entry.fTextSize * pad_height);
+                     if (entry.fTextSize) arg.font_size = this.textatt.getAltSize(entry.fTextSize, pad_height);
                   }
-                  if (!arg.color) { this.UseTextColor = true; arg.color = tcolor; }
+                  if (!arg.color) { this.UseTextColor = true; arg.color = this.textatt.color; }
                   this.drawText(arg);
                }
                break;
@@ -72326,9 +72604,9 @@ class TPavePainter extends ObjectPainter {
                .call(this.fillatt.func)
                .call(this.lineatt.func);
 
-         this.startTextDrawing(pt.fTextFont, h/1.5, lbl_g);
+         this.startTextDrawing(this.textatt.font, h/1.5, lbl_g);
 
-         this.drawText({ align: 22, x, y, width: w, height: h, text: pt.fLabel, color: tcolor, draw_g: lbl_g });
+         this.drawText({ align: 22, x, y, width: w, height: h, text: pt.fLabel, color: this.textatt.color, draw_g: lbl_g });
 
          promises.push(this.finishTextDrawing(lbl_g));
 
@@ -72369,7 +72647,9 @@ class TPavePainter extends ObjectPainter {
       let legend = this.getObject(),
           nlines = legend.fPrimitives.arr.length,
           ncols = legend.fNColumns,
-          nrows = nlines;
+          nrows = nlines,
+          any_text = false,
+          custom_textg = false; // each text entry has own attributes
 
       if (ncols < 2) {
          ncols = 1;
@@ -72379,44 +72659,54 @@ class TPavePainter extends ObjectPainter {
 
       const isEmpty = entry => !entry.fObject && !entry.fOption && (!entry.fLabel || (entry.fLabel == ' '));
 
-      if (ncols == 1)
-         for (let ii = 0; ii < nlines; ++ii)
-            if (isEmpty(legend.fPrimitives.arr[ii])) nrows--;
+      for (let ii = 0; ii < nlines; ++ii) {
+         let entry = legend.fPrimitives.arr[ii];
+         if (isEmpty(entry)) {
+            if (ncols == 1)
+               nrows--;
+         } else if (entry.fLabel) {
+            any_text = true;
+            if ((entry.fTextFont && (entry.fTextFont != legend.fTextFont)) ||
+                (entry.fTextSize && (entry.fTextSize != legend.fTextSize))) custom_textg = true;
+         }
+      }
 
       if (nrows < 1) nrows = 1;
 
-      let tcolor = this.getColor(legend.fTextColor),
-          column_width = Math.round(w/ncols),
+      let column_width = Math.round(w/ncols),
           padding_x = Math.round(0.03*w/ncols),
           padding_y = Math.round(0.03*h),
           step_y = (h - 2*padding_y)/nrows,
           font_size = 0.9*step_y,
           max_font_size = 0, // not limited in the beggining
           pp = this.getPadPainter(),
-          ph = pp.getPadHeight(),
-          any_opt = false, i = -1;
+          any_opt = false, i = -1, text_promises = [];
 
-      if (legend.fTextSize && (ph*legend.fTextSize > 2) && (ph*legend.fTextSize < font_size))
-         font_size = max_font_size = Math.round(ph*legend.fTextSize);
+      this.createAttText({ attr: legend });
 
-      this.startTextDrawing(legend.fTextFont, font_size, this.draw_g, max_font_size);
+      let tsz = this.textatt.getSize(pp.getPadHeight());
+      if (tsz && (tsz < font_size))
+         font_size = max_font_size = tsz;
+
+      if (any_text && !custom_textg)
+         this.startTextDrawing(this.textatt.font, font_size, this.draw_g, max_font_size);
 
       for (let ii = 0; ii < nlines; ++ii) {
-         let leg = legend.fPrimitives.arr[ii];
+         let entry = legend.fPrimitives.arr[ii];
 
-         if (isEmpty(leg)) continue; // let discard empty entry
+         if (isEmpty(entry)) continue; // let discard empty entry
 
          if (ncols == 1) ++i; else i = ii;
 
-         let lopt = leg.fOption.toLowerCase(),
+         let lopt = entry.fOption.toLowerCase(),
              icol = i % ncols, irow = (i - icol) / ncols,
              x0 = icol * column_width,
              tpos_x = x0 + Math.round(legend.fMargin*column_width),
              mid_x = Math.round((x0 + tpos_x)/2),
              pos_y = Math.round(irow*step_y + padding_y), // top corner
              mid_y = Math.round((irow+0.5)*step_y + padding_y), // center line
-             o_fill = leg, o_marker = leg, o_line = leg,
-             mo = leg.fObject,
+             o_fill = entry, o_marker = entry, o_line = entry,
+             mo = entry.fObject,
              painter = null, isany = false;
 
          const draw_fill = lopt.indexOf('f') != -1,
@@ -72487,17 +72777,32 @@ class TPavePainter extends ObjectPainter {
                        .call(painter.lineatt.func);
 
          let pos_x = tpos_x;
-         if (lopt)
+         if (isStr(lopt) && (lopt.toLowerCase() != 'h'))
             any_opt = true;
          else if (!any_opt)
             pos_x = x0 + padding_x;
 
-         if (leg.fLabel)
-            this.drawText({ align: legend.fTextAlign, x: pos_x, y: pos_y, width: x0+column_width-pos_x-padding_x, height: step_y, text: leg.fLabel, color: tcolor });
+         if (entry.fLabel) {
+            let lbl_g = this.draw_g,
+                textatt = this.createAttText({ attr: entry, std: false, attr_alt: legend });
+            if (custom_textg) {
+               lbl_g = this.draw_g.append('svg:g');
+               let entry_font_size = textatt.getSize(pp.getPadHeight());
+               this.startTextDrawing(textatt.font, entry_font_size, lbl_g, max_font_size);
+            }
+
+            this.drawText({ draw_g: lbl_g, align: textatt.align, x: pos_x, y: pos_y, width: x0+column_width-pos_x-padding_x, height: step_y, text: entry.fLabel, color: textatt.color });
+
+            if (custom_textg)
+               text_promises.push(this.finishTextDrawing(lbl_g));
+         }
       }
 
+      if (any_text && !custom_textg)
+         text_promises.push(this.finishTextDrawing());
+
       // rescale after all entries are shown
-      return this.finishTextDrawing();
+      return Promise.all(text_promises);
    }
 
    /** @summary draw color palette with axis */
@@ -72945,6 +73250,7 @@ class TPavePainter extends ObjectPainter {
       pave.fBorderSize = obj.fBorderSize;
 
       switch (obj._typename) {
+         case clTDiamond:
          case clTPaveText:
             pave.fLines = clone(obj.fLines);
             return true;
@@ -73341,8 +73647,8 @@ class THistDrawOptions {
       Object.assign(this,
             { Axis: 0, RevX: false, RevY: false, SymlogX: 0, SymlogY: 0,
               Bar: false, BarStyle: 0, Curve: false,
-              Hist: true, Line: false, Fill: false,
-              Error: false, ErrorKind: -1, errorX: gStyle.fErrorX,
+              Hist: 1, Line: false, Fill: false,
+              Error: 0, ErrorKind: -1, errorX: gStyle.fErrorX,
               Mark: false, Same: false, Scat: false, ScatCoef: 1., Func: true,
               Arrow: false, Box: false, BoxStyle: 0,
               Text: false, TextAngle: 0, TextKind: '', Char: 0, Color: false, Contour: 0, Cjust: false,
@@ -73352,13 +73658,29 @@ class THistDrawOptions {
               GLBox: 0, GLColor: false, Project: '',
               System: CoordSystem.kCARTESIAN,
               AutoColor: false, NoStat: false, ForceStat: false, PadStats: false, PadTitle: false, AutoZoom: false,
-              HighRes: 0, Zero: true, Palette: 0, BaseLine: false,
+              HighRes: 0, Zero: 1, Palette: 0, BaseLine: false,
               Optimize: settings.OptimizeDraw, adjustFrame: false,
               Mode3D: false, x3dscale: 1, y3dscale: 1,
               Render3D: constants$1.Render3D.Default,
               FrontBox: true, BackBox: true,
               _pmc: false, _plc: false, _pfc: false, need_fillcol: false,
               minimum: kNoZoom, maximum: kNoZoom, ymin: 0, ymax: 0, cutg: null, IgnoreMainScale: false });
+   }
+
+   /** @summary Base on sumw2 values (re)set some bacis draw options, only for 1dim hist */
+   decodeSumw2(histo, force) {
+      let len = histo.fSumw2?.length ?? 0, isany = false;
+      for (let n = 0; n < len; ++n)
+         if (histo.fSumw2[n] > 0) { isany = true; break; }
+
+      if (Number.isInteger(this.Error) || force)
+         this.Error = isany ? 1 : 0;
+
+      if (Number.isInteger(this.Hist) || force)
+         this.Hist = isany ? 0 : 1;
+
+      if (Number.isInteger(this.Zero) || force)
+         this.Zero = isany ? 0 : 1;
    }
 
    /** @summary Decode histogram draw options */
@@ -73378,9 +73700,7 @@ class THistDrawOptions {
 
       const d = new DrawOptions(opt);
 
-      if ((hdim === 1) && (histo.fSumw2.length > 0))
-         for (let n = 0; n < histo.fSumw2.length; ++n)
-            if (histo.fSumw2[n] > 0) { this.Error = true; this.Hist = false; this.Zero = false; break; }
+      if (hdim === 1) this.decodeSumw2(histo, true);
 
       this.ndim = hdim || 1; // keep dimensions, used for now in GED
 
@@ -73600,8 +73920,9 @@ class THistDrawOptions {
       if (d.check('PARABOLIC')) this.Proj = 4;
       if (this.Proj > 0) this.Contour = 14;
 
-      if (d.check('PROJX',true)) this.Project = 'X' + d.partAsInt(0,1);
-      if (d.check('PROJY',true)) this.Project = 'Y' + d.partAsInt(0,1);
+      if (d.check('PROJXY', true)) this.Project = 'XY' + d.partAsInt(0,1);
+      if (d.check('PROJX', true)) this.Project = 'X' + d.part;
+      if (d.check('PROJY', true)) this.Project = 'Y' + d.part;
       if (d.check('PROJ')) this.Project = 'Y1';
 
       if (check3dbox) {
@@ -74171,6 +74492,9 @@ class THistPainter extends ObjectPainter {
          histo.fMinimum = obj.fMinimum;
          histo.fMaximum = obj.fMaximum;
          histo.fSumw2 = obj.fSumw2;
+
+         if (this.getDimension() == 1)
+            this.options.decodeSumw2(histo);
 
          if (this.isTProfile()) {
             histo.fBinEntries = obj.fBinEntries;
@@ -75803,7 +76127,7 @@ let TH1Painter$2 = class TH1Painter extends THistPainter {
       if (this.isTProfile()) {
 
          if (print_entries > 0)
-            stat.addText('Entries = ' + stat.format(data.entries,'entries'));
+            stat.addText('Entries = ' + stat.format(data.entries, 'entries'));
 
          if (print_mean > 0) {
             stat.addText('Mean = ' + stat.format(data.meanx));
@@ -75912,14 +76236,14 @@ let TH1Painter$2 = class TH1Painter extends THistPainter {
          }
 
          if (show_text && y) {
-            let lbl = (y === Math.round(y)) ? y.toString() : floatToString(y, gStyle.fPaintTextFormat);
+            let text = (y === Math.round(y)) ? y.toString() : floatToString(y, gStyle.fPaintTextFormat);
 
             if (pmain.swap_xy)
-               this.drawText({ align: 12, x: Math.round(gry1 + text_size/2), y: Math.round(grx1+0.1), height: Math.round(w*0.8), text: lbl, color: text_col, latex: 0 });
+               this.drawText({ align: 12, x: Math.round(gry1 + text_size/2), y: Math.round(grx1+0.1), height: Math.round(w*0.8), text, color: text_col, latex: 0 });
             else if (text_angle)
-               this.drawText({ align: 12, x: grx1+w/2, y: Math.round(gry1 - 2 - text_size/5), width: 0, height: 0, rotate: text_angle, text: lbl, color: text_col, latex: 0 });
+               this.drawText({ align: 12, x: grx1+w/2, y: Math.round(gry1 - 2 - text_size/5), width: 0, height: 0, rotate: text_angle, text, color: text_col, latex: 0 });
             else
-               this.drawText({ align: 22, x: Math.round(grx1 + w*0.1), y: Math.round(gry1-2-text_size), width: Math.round(w*0.8), height: text_size, text: lbl, color: text_col, latex: 0 });
+               this.drawText({ align: 22, x: Math.round(grx1 + w*0.1), y: Math.round(gry1 - 2 - text_size), width: Math.round(w*0.8), height: text_size, text, color: text_col, latex: 0 });
          }
       }
 
@@ -76847,20 +77171,40 @@ let TH2Painter$2 = class TH2Painter extends THistPainter {
    /** @summary Toggle projection */
    toggleProjection(kind, width) {
 
-      if ((kind == 'Projections') || (kind == 'Off')) kind = '';
+      if ((kind == 'Projections') || (kind == 'Off'))
+         kind = '';
 
-      if (isStr(kind) && (kind.length > 1)) {
-          width = parseInt(kind.slice(1));
-          kind = kind[0];
+      let widthX = width, widthY = width;
+
+      if (isStr(kind) && (kind.indexOf('XY') == 0)) {
+         let ws = (kind.length > 2) ? kind.slice(2) : '';
+         kind = 'XY';
+         widthX = widthY = parseInt(ws) || 1;
+      } else if (isStr(kind) && (kind.length > 1)) {
+         let ps = kind.indexOf('_');
+         if ((ps > 0) && (kind[0] == 'X') && (kind[ps+1] == 'Y')) {
+            widthX = parseInt(kind.slice(1, ps)) || 1;
+            widthY = parseInt(kind.slice(ps+2)) || 1;
+            kind = 'XY';
+         } else if ((ps > 0) && (kind[0] == 'Y') && (kind[ps+1] == 'X')) {
+            widthY = parseInt(kind.slice(1, ps)) || 1;
+            widthX = parseInt(kind.slice(ps+2)) || 1;
+            kind = 'XY';
+         } else {
+            widthX = widthY = parseInt(kind.slice(1)) || 1;
+            kind = kind[0];
+         }
       }
 
-      if (!width) width = 1;
+      if (!widthX && !widthY)
+         widthX = widthY = 1;
 
       if (kind && (this.is_projection == kind)) {
-         if (this.projection_width === width) {
+         if ((this.projection_widthX === widthX) && (this.projection_widthY === widthY)) {
             kind = '';
          } else {
-            this.projection_width = width;
+            this.projection_widthX = widthX;
+            this.projection_widthY = widthY;
             return;
          }
       }
@@ -76868,7 +77212,8 @@ let TH2Painter$2 = class TH2Painter extends THistPainter {
       delete this.proj_hist;
 
       let new_proj = (this.is_projection === kind) ? '' : kind;
-      this.projection_width = width;
+      this.projection_widthX = widthX;
+      this.projection_widthY = widthY;
       this.is_projection = ''; // avoid projection handling until area is created
 
       this.provideSpecialDrawArea(new_proj).then(() => { this.is_projection = new_proj; return this.redrawProjection(); });
@@ -76889,12 +77234,12 @@ let TH2Painter$2 = class TH2Painter extends THistPainter {
 
       if (canp && !canp._readonly && (this.snapid !== undefined)) {
          // this is when projection should be created on the server side
-         let exec = `EXECANDSEND:D${this.is_projection}PROJ:${this.snapid}:`;
-         if (this.is_projection == 'X')
-            exec += `ProjectionX("_projx",${jj1+1},${jj2},"")`;
-         else
-            exec += `ProjectionY("_projy",${ii1+1},${ii2},"")`;
-         canp.sendWebsocket(exec);
+         if (((this.is_projection == 'X') || (this.is_projection == 'XY')) && !canp.websocketTimeout('projX'))
+            if (canp.sendWebsocket(`EXECANDSEND:DXPROJ:${this.snapid}:ProjectionX("_projx",${jj1+1},${jj2},"")`))
+               canp.websocketTimeout('projX', 1000);
+         if (((this.is_projection == 'Y') || (this.is_projection == 'XY')) && !canp.websocketTimeout('projY'))
+            if (canp.sendWebsocket(`EXECANDSEND:DYPROJ:${this.snapid}:ProjectionY("_projy",${ii1+1},${ii2},"")`))
+               canp.websocketTimeout('projY', 1000);
          return true;
       }
 
@@ -76903,56 +77248,79 @@ let TH2Painter$2 = class TH2Painter extends THistPainter {
 
       this.doing_projection = true;
 
-      let histo = this.getHisto();
-
-      if (!this.proj_hist) {
-         if (this.is_projection == 'X') {
-            this.proj_hist = createHistogram('TH1D', this.nbinsx);
-            Object.assign(this.proj_hist.fXaxis, histo.fXaxis);
-            this.proj_hist.fName = 'xproj';
-            this.proj_hist.fTitle = 'X projection';
+      const histo = this.getHisto(),
+      createXProject = () => {
+        let p = createHistogram('TH1D', this.nbinsx);
+        Object.assign(p.fXaxis, histo.fXaxis);
+        p.fName = 'xproj';
+        p.fTitle = 'X projection';
+        return p;
+      },
+      createYProject = () => {
+        let p = createHistogram('TH1D', this.nbinsy);
+        Object.assign(p.fXaxis, histo.fYaxis);
+        p.fName = 'yproj';
+        p.fTitle = 'Y projection';
+        return p;
+      },
+      fillProjectHist = (kind, p) => {
+         let first = 0, last = -1;
+         if (kind == 'X') {
+            for (let i = 0; i < this.nbinsx; ++i) {
+               let sum = 0;
+               for (let j = jj1; j < jj2; ++j)
+                  sum += histo.getBinContent(i+1,j+1);
+               p.setBinContent(i+1, sum);
+            }
+            p.fTitle = 'X projection ' + (jj1+1 == jj2 ? `bin ${jj2}` : `bins [${jj1+1} .. ${jj2}]`);
+            if (this.tt_handle) { first = this.tt_handle.i1+1; last = this.tt_handle.i2; }
          } else {
-            this.proj_hist = createHistogram('TH1D', this.nbinsy);
-            Object.assign(this.proj_hist.fXaxis, histo.fYaxis);
-            this.proj_hist.fName = 'yproj';
-            this.proj_hist.fTitle = 'Y projection';
+            for (let j = 0; j < this.nbinsy; ++j) {
+               let sum = 0;
+               for (let i = ii1; i < ii2; ++i)
+                  sum += histo.getBinContent(i+1,j+1);
+               p.setBinContent(j+1, sum);
+            }
+            p.fTitle = 'Y projection ' + (ii1+1 == ii2 ? `bin ${ii2}` : `bins [${ii1+1} .. ${ii2}]`);
+            if (this.tt_handle) { first = this.tt_handle.j1+1; last = this.tt_handle.j2; }
          }
+
+         if (first < last) {
+            let axis = p.fXaxis;
+            axis.fFirst = first;
+            axis.fLast = last;
+
+            if (((axis.fFirst == 1) && (axis.fLast == axis.fNbins)) == axis.TestBit(EAxisBits.kAxisRange))
+               axis.InvertBit(EAxisBits.kAxisRange);
+         }
+
+         // reset statistic before display
+         p.fEntries = 0;
+         p.fTsumw = 0;
+      };
+
+      if (!this.proj_hist)
+         switch (this.is_projection) {
+            case 'X':
+               this.proj_hist = createXProject();
+               break;
+            case 'XY':
+               this.proj_hist = createXProject();
+               this.proj_hist2 = createYProject();
+               break;
+            default:
+               this.proj_hist = createYProject();
+         }
+
+      if (this.is_projection == 'XY') {
+         fillProjectHist('X', this.proj_hist);
+         fillProjectHist('Y', this.proj_hist2);
+         return this.drawInSpecialArea(this.proj_hist, '', 'X')
+                    .then(() => this.drawInSpecialArea(this.proj_hist2, '', 'Y'))
+                    .then(res => { delete this.doing_projection; return res; });
       }
 
-      let first = 0, last = -1;
-      if (this.is_projection == 'X') {
-         for (let i = 0; i < this.nbinsx; ++i) {
-            let sum = 0;
-            for (let j = jj1; j < jj2; ++j)
-               sum += histo.getBinContent(i+1,j+1);
-            this.proj_hist.setBinContent(i+1, sum);
-         }
-         this.proj_hist.fTitle = 'X projection ' + (jj1+1 == jj2 ? `bin ${jj2}` : `bins [${jj1+1} .. ${jj2}]`);
-         if (this.tt_handle) { first = this.tt_handle.i1+1; last = this.tt_handle.i2; }
-
-      } else {
-         for (let j = 0; j < this.nbinsy; ++j) {
-            let sum = 0;
-            for (let i = ii1; i < ii2; ++i)
-               sum += histo.getBinContent(i+1,j+1);
-            this.proj_hist.setBinContent(j+1, sum);
-         }
-         this.proj_hist.fTitle = 'Y projection ' + (ii1+1 == ii2 ? `bin ${ii2}` : `bins [${ii1+1} .. ${ii2}]`);
-         if (this.tt_handle) { first = this.tt_handle.j1+1; last = this.tt_handle.j2; }
-      }
-
-      if (first < last) {
-         let axis = this.proj_hist.fXaxis;
-         axis.fFirst = first;
-         axis.fLast = last;
-
-         if (((axis.fFirst == 1) && (axis.fLast == axis.fNbins)) == axis.TestBit(EAxisBits.kAxisRange))
-            axis.InvertBit(EAxisBits.kAxisRange);
-      }
-
-      // reset statistic before display
-      this.proj_hist.fEntries = 0;
-      this.proj_hist.fTsumw = 0;
+      fillProjectHist(this.is_projection, this.proj_hist);
 
       return this.drawInSpecialArea(this.proj_hist).then(res => { delete this.doing_projection; return res; });
    }
@@ -76974,11 +77342,15 @@ let TH2Painter$2 = class TH2Painter extends THistPainter {
    /** @summary Fill histogram context menu */
    fillHistContextMenu(menu) {
       if (!this.isTH2Poly()) {
-         menu.add('sub:Projections', () => this.toggleProjection());
          let kind = this.is_projection || '';
-         if (kind) kind += this.projection_width;
-         const kinds = ['X1', 'X2', 'X3', 'X5', 'X10', 'Y1', 'Y2', 'Y3', 'Y5', 'Y10'];
-         if (this.is_projection) kinds.push('Off');
+         if (kind) kind += this.projection_widthX;
+         if ((this.projection_widthX != this.projection_widthY) && (this.is_projection == 'XY'))
+            kind = `X${this.projection_widthX}_Y${this.projection_widthY}`;
+
+         const kinds = ['X1', 'X2', 'X3', 'X5', 'X10', 'Y1', 'Y2', 'Y3', 'Y5', 'Y10', 'XY1', 'XY2', 'XY3', 'XY5', 'XY10'];
+         if (kind) kinds.unshift('Off');
+
+         menu.add('sub:Projections', () => menu.input('Input projection kind X1 or XY2 or X3_Y4', kind, 'string').then(val => this.toggleProjection(val)));
          for (let k = 0; k < kinds.length; ++k)
             menu.addchk(kind==kinds[k], kinds[k], kinds[k], arg => this.toggleProjection(arg));
          menu.add('endsub:');
@@ -79340,10 +79712,10 @@ let TH2Painter$2 = class TH2Painter extends THistPainter {
       // search bins position
       if (pmain.reverse_x) {
          for (i = h.i1; i < h.i2; ++i)
-            if ((pnt.x<=h.grx[i]) && (pnt.x>=h.grx[i+1])) break;
+            if ((pnt.x <= h.grx[i]) && (pnt.x >= h.grx[i+1])) break;
       } else {
          for (i = h.i1; i < h.i2; ++i)
-            if ((pnt.x>=h.grx[i]) && (pnt.x<=h.grx[i+1])) break;
+            if ((pnt.x >= h.grx[i]) && (pnt.x <= h.grx[i+1])) break;
       }
 
       if (pmain.reverse_y) {
@@ -79381,7 +79753,7 @@ let TH2Painter$2 = class TH2Painter extends THistPainter {
             }
          }
 
-         binz = histo.getBinContent(i+1,j+1);
+         binz = histo.getBinContent(i+1, j+1);
          if (this.is_projection) {
             colindx = 0; // just to avoid hide
          } else if (!match) {
@@ -79416,32 +79788,40 @@ let TH2Painter$2 = class TH2Painter extends THistPainter {
                                 .attr('class', 'tooltip_bin h1bin')
                                 .style('pointer-events', 'none');
 
-         let binid = i*10000 + j;
+         let binid = i*10000 + j, path;
+
+         if (this.is_projection) {
+            let pwx = this.projection_widthX || 1, ddx = (pwx - 1) / 2;
+            if ((this.is_projection.indexOf('X')) >= 0 && (pwx > 1)) {
+               if (j2+ddx >= h.j2) { j2 = Math.min(Math.round(j2+ddx), h.j2); j1 = Math.max(j2-pwx, h.j1); }
+                              else { j1 = Math.max(Math.round(j1-ddx), h.j1); j2 = Math.min(j1+pwx, h.j2); }
+            }
+            let pwy = this.projection_widthY || 1, ddy = (pwy - 1) / 2;
+            if ((this.is_projection.indexOf('Y')) >= 0 && (pwy > 1)) {
+               if (i2+ddy >= h.i2) { i2 = Math.min(Math.round(i2+ddy), h.i2); i1 = Math.max(i2-pwy, h.i1); }
+                              else { i1 = Math.max(Math.round(i1-ddy), h.i1); i2 = Math.min(i1+pwy, h.i2); }
+            }
+         }
 
          if (this.is_projection == 'X') {
-            x1 = 0; x2 = this.getFramePainter().getFrameWidth();
-            if (this.projection_width > 1) {
-               let dd = (this.projection_width-1)/2;
-               if (j2+dd >= h.j2) { j2 = Math.min(Math.round(j2+dd), h.j2); j1 = Math.max(j2 - this.projection_width, h.j1); }
-                             else { j1 = Math.max(Math.round(j1-dd), h.j1); j2 = Math.min(j1 + this.projection_width, h.j2); }
-            }
+            x1 = 0; x2 = pmain.getFrameWidth();
             y1 = h.gry[j2]; y2 = h.gry[j1];
             binid = j1*777 + j2*333;
          } else if (this.is_projection == 'Y') {
-            y1 = 0; y2 = this.getFramePainter().getFrameHeight();
-            if (this.projection_width > 1) {
-               let dd = (this.projection_width-1)/2;
-               if (i2+dd >= h.i2) { i2 = Math.min(Math.round(i2+dd), h.i2); i1 = Math.max(i2 - this.projection_width, h.i1); }
-                             else { i1 = Math.max(Math.round(i1-dd), h.i1); i2 = Math.min(i1 + this.projection_width, h.i2); }
-            }
-            x1 = h.grx[i1], x2 = h.grx[i2],
+            y1 = 0; y2 = pmain.getFrameHeight();
+            x1 = h.grx[i1]; x2 = h.grx[i2];
             binid = i1*777 + i2*333;
+         } else if (this.is_projection == 'XY') {
+            y1 = h.gry[j2]; y2 = h.gry[j1];
+            x1 = h.grx[i1]; x2 = h.grx[i2];
+            binid = i1*789 + i2*653 + j1*12345 + j2*654321;
+            path = `M${x1},0H${x2}V${y1}H${pmain.getFrameWidth()}V${y2}H${x2}V${pmain.getFrameHeight()}H${x1}V${y2}H0V${y1}H${x1}Z`;
          }
 
          res.changed = ttrect.property('current_bin') !== binid;
 
          if (res.changed)
-            ttrect.attr('d', `M${x1},${y1}h${x2-x1}v${y2-y1}h${x1-x2}z`)
+            ttrect.attr('d', path || `M${x1},${y1}H${x2}V${y2}H${x1}Z`)
                   .style('opacity', '0.7')
                   .property('current_bin', binid);
 
@@ -86265,7 +86645,8 @@ class TGeoPainter extends ObjectPainter {
    changedBackground(val) {
       if (val !== undefined)
          this.ctrl.background = val;
-      this._renderer.setClearColor(this.ctrl.background, 1);
+      this._scene.background = new Color$1(this.ctrl.background);
+      this._renderer.setClearColor(this._scene.background, 1);
       this.render3D(0);
 
       if (this._toolbar) {
@@ -87599,6 +87980,8 @@ class TGeoPainter extends ObjectPainter {
 
       this._scene.add(this._toplevel);
 
+      this._scene.background = new Color$1(this.ctrl.background);
+
       return createRender3D(w, h, this.options.Render3D, { antialias: true, logarithmicDepthBuffer: false, preserveDrawingBuffer: true }).then(r => {
 
          this._renderer = r;
@@ -87610,7 +87993,7 @@ class TGeoPainter extends ObjectPainter {
          this._renderer.setSize(w, h, !this._fit_main_area);
          this._renderer.localClippingEnabled = true;
 
-         this._renderer.setClearColor(this.ctrl.background, 1);
+         this._renderer.setClearColor(this._scene.background, 1);
 
          if (this._fit_main_area && this._webgl) {
             this._renderer.domElement.style.width = '100%';
@@ -98987,7 +99370,7 @@ class HierarchyPainter extends BasePainter {
    }
 
    /** @summary Toggle open state of the item
-     * @desc Used with 'open all' / 'close all' buttons in normal GUI
+     * @desc Used with 'expand all' / 'collapse all' buttons in normal GUI
      * @param {boolean} isopen - if items should be expand or closed
      * @return {boolean} true when any item was changed */
    toggleOpenState(isopen, h) {
@@ -99068,35 +99451,35 @@ class HierarchyPainter extends BasePainter {
       }
 
       let d3btns = d3elem.append('p').attr('class', 'jsroot').style('margin-bottom','3px').style('margin-top',0);
-      d3btns.append('a').attr('class', 'h_button').text('open all')
-            .attr('title','open all items in the browser').on('click', () => this.toggleOpenState(true));
+      d3btns.append('a').attr('class', 'h_button').text('expand all')
+            .attr('title', 'expand all items in the browser').on('click', () => this.toggleOpenState(true));
       d3btns.append('text').text(' | ');
-      d3btns.append('a').attr('class', 'h_button').text('close all')
-            .attr('title','close all items in the browser').on('click', () => this.toggleOpenState(false));
+      d3btns.append('a').attr('class', 'h_button').text('collapse all')
+            .attr('title', 'collapse all items in the browser').on('click', () => this.toggleOpenState(false));
 
       if (isFunc(this.removeInspector)) {
          d3btns.append('text').text(' | ');
          d3btns.append('a').attr('class', 'h_button').text('remove')
-               .attr('title','remove inspector').on('click', () => this.removeInspector());
+               .attr('title', 'remove inspector').on('click', () => this.removeInspector());
       }
 
       if ('_online' in this.h) {
          d3btns.append('text').text(' | ');
          d3btns.append('a').attr('class', 'h_button').text('reload')
-               .attr('title','reload object list from the server').on('click', () => this.reload());
+               .attr('title', 'reload object list from the server').on('click', () => this.reload());
       }
 
       if ('disp_kind' in this) {
          d3btns.append('text').text(' | ');
          d3btns.append('a').attr('class', 'h_button').text('clear')
-               .attr('title','clear all drawn objects').on('click', () => this.clearHierarchy(false));
+               .attr('title', 'clear all drawn objects').on('click', () => this.clearHierarchy(false));
       }
 
       let maindiv =
          d3elem.append('div')
                .attr('class', 'jsroot')
                .style('font-size', this.with_icons ? '12px' : '15px')
-               .style('flex','1');
+               .style('flex', '1');
 
       if (!this.show_overflow)
          maindiv.style('overflow','auto');
@@ -104176,10 +104559,10 @@ async function drawText$1() {
        w = pp.getPadWidth(),
        h = pp.getPadHeight(),
        pos_x = text.fX, pos_y = text.fY,
-       tcolor = this.getColor(text.fTextColor),
        use_frame = false,
-       fact = 1., textsize = text.fTextSize || 0.05,
-       main = this.getFramePainter();
+       fact = 1., main = this.getFramePainter();
+
+   this.createAttText({ attr: text });
 
    if (text.TestBit(BIT(14))) {
       // NDC coordinates
@@ -104194,7 +104577,6 @@ async function drawText$1() {
       this.isndc = true;
       pos_x = pos_y = 0.5;
       text.fTextAlign = 22;
-      if (!tcolor) tcolor = 'black';
    }
 
    this.createG(use_frame);
@@ -104204,9 +104586,7 @@ async function drawText$1() {
    this.pos_x = this.axisToSvg('x', pos_x, this.isndc);
    this.pos_y = this.axisToSvg('y', pos_y, this.isndc);
 
-   let arg = { align: text.fTextAlign, x: this.pos_x, y: this.pos_y, text: text.fTitle, color: tcolor, latex: 0 };
-
-   if (text.fTextAngle) arg.rotate = -text.fTextAngle;
+   let arg = this.textatt.createArg({ x: this.pos_x, y: this.pos_y, text: text.fTitle, latex: 0 });
 
    if (text._typename == clTLatex) {
       arg.latex = 1;
@@ -104216,7 +104596,7 @@ async function drawText$1() {
       fact = 0.8;
    }
 
-   this.startTextDrawing(text.fTextFont, Math.round((textsize > 1) ? textsize : textsize*Math.min(w,h)*fact));
+   this.startTextDrawing(this.textatt.font, this.textatt.getSize(w, h, fact, 0.05));
 
    this.drawText(arg);
 
@@ -113466,14 +113846,15 @@ class RPadPainter extends RObjectPainter {
             return check_resize > 1; // flag used to force re-drawing of all subpads
 
          svg = this.getCanvSvg();
-
-         if (svg.empty()) return false;
+         if (svg.empty())
+            return false;
 
          factor = svg.property('height_factor');
 
          rect = this.testMainResize(check_resize, null, factor);
 
-         if (!rect.changed) return false;
+         if (!rect.changed && (check_resize == 1))
+            return false;
 
          if (!isBatchMode())
             btns = this.getLayerSvg('btns_layer', this.this_pad_name);
@@ -115544,13 +115925,16 @@ class RCanvasPainter extends RPadPainter {
 
       let origin = this.selectDom('origin'),
           sidebar = origin.select('.side_panel'),
-          main = this.selectDom(), lst = [];
+          sidebar2 = origin.select('.side_panel2'),
+          main = this.selectDom(), lst = [], force;
 
       while (main.node().firstChild)
          lst.push(main.node().removeChild(main.node().firstChild));
 
       if (!sidebar.empty())
          cleanup(sidebar.node());
+      if (!sidebar2.empty())
+         cleanup(sidebar2.node());
 
       this.setLayoutKind('simple'); // restore defaults
       origin.html(''); // cleanup origin
@@ -115560,6 +115944,7 @@ class RCanvasPainter extends RPadPainter {
          for (let k = 0; k < lst.length; ++k)
             main.node().appendChild(lst[k]);
          this.setLayoutKind(layout_kind);
+         force = true;
       } else {
          let grid = new GridDisplay(origin.node(), layout_kind);
 
@@ -115567,10 +115952,19 @@ class RCanvasPainter extends RPadPainter {
             mainid = (layout_kind.indexOf('vert') == 0) ? 0 : 1;
 
          main = select(grid.getGridFrame(mainid));
-         sidebar = select(grid.getGridFrame(1 - mainid));
-
          main.classed('central_panel', true).style('position', 'relative');
-         sidebar.classed('side_panel', true).style('position', 'relative');
+
+         if (mainid == 2) {
+            // left panel for Y
+            sidebar = select(grid.getGridFrame(0));
+            sidebar.classed('side_panel2', true).style('position', 'relative');
+            // bottom panel for X
+            sidebar = select(grid.getGridFrame(3));
+            sidebar.classed('side_panel', true).style('position', 'relative');
+         } else {
+            sidebar = select(grid.getGridFrame(1 - mainid));
+            sidebar.classed('side_panel', true).style('position', 'relative');
+         }
 
          // now append all childs to the new main
          for (let k = 0; k < lst.length; ++k)
@@ -115583,7 +115977,7 @@ class RCanvasPainter extends RPadPainter {
       }
 
       // resize main drawing and let draw extras
-      resize(main.node());
+      resize(main.node(), force);
       return true;
    }
 
@@ -115593,7 +115987,7 @@ class RCanvasPainter extends RPadPainter {
    async toggleProjection(kind) {
       delete this.proj_painter;
 
-      if (kind) this.proj_painter = 1; // just indicator that drawing can be preformed
+      if (kind) this.proj_painter = { 'X': false, 'Y': false }; // just indicator that drawing can be preformed
 
       if (isFunc(this.showUI5ProjectionArea))
          return this.showUI5ProjectionArea(kind);
@@ -115601,6 +115995,7 @@ class RCanvasPainter extends RPadPainter {
       let layout = 'simple', mainid;
 
       switch(kind) {
+         case 'XY': layout = 'projxy'; mainid = 2; break;
          case 'X':
          case 'bottom': layout = 'vert2_31'; mainid = 0; break;
          case 'Y':
@@ -115614,15 +116009,16 @@ class RCanvasPainter extends RPadPainter {
 
    /** @summary Draw projection for specified histogram
      * @private */
-   async drawProjection( /*kind,hist*/) {
+   async drawProjection(/*kind,hist,hopt*/) {
       // dummy for the moment
       return false;
    }
 
    /** @summary Draw in side panel
      * @private */
-   async drawInSidePanel(canv, opt) {
-      let side = this.selectDom('origin').select('.side_panel');
+   async drawInSidePanel(canv, opt, kind) {
+      let sel = ((this.getLayoutKind() == 'projxy') && (kind == 'Y')) ? '.side_panel2' : '.side_panel',
+          side = this.selectDom('origin').select(sel);
       return side.empty() ? null : this.drawObject(side.node(), canv, opt);
    }
 
@@ -115647,7 +116043,7 @@ class RCanvasPainter extends RPadPainter {
    saveCanvasAsFile(fname) {
       let pnt = fname.indexOf('.');
       this.createImage(fname.slice(pnt+1))
-          .then(res => { console.log('save', fname, res.length); this.sendWebsocket('SAVE:' + fname + ':' + res); });
+          .then(res => this.sendWebsocket(`SAVE:${fname}:${res}`));
    }
 
    /** @summary Send command to server to save canvas with specified name
@@ -115688,6 +116084,25 @@ class RCanvasPainter extends RPadPainter {
       this._websocket.connect();
    }
 
+   /** @summary set, test or reset timeout of specified name
+     * @desc Used to prevent overloading of websocket for specific function */
+   websocketTimeout(name, tm) {
+      if (!this._websocket)
+         return;
+      if (!this._websocket._tmouts)
+         this._websocket._tmouts = {};
+
+      let handle = this._websocket._tmouts[name];
+      if (tm === undefined)
+         return handle !== undefined;
+
+      if (tm == 'reset') {
+         if (handle) { clearTimeout(handle); delete this._websocket._tmouts[name]; }
+      } else if (!handle && Number.isInteger(tm)) {
+         this._websocket._tmouts[name] = setTimeout(() => { delete this._websocket._tmouts[name]; }, tm);
+      }
+   }
+
    /** @summary Hanler for websocket open event
      * @private */
    onWebsocketOpened(/*handle*/) {
@@ -115703,7 +116118,7 @@ class RCanvasPainter extends RPadPainter {
    /** @summary Hanler for websocket message
      * @private */
    onWebsocketMsg(handle, msg) {
-      console.log('GET_MSG ' + msg.slice(0,30));
+      // console.log('GET_MSG ' + msg.slice(0,30));
 
       if (msg == 'CLOSE') {
          this.onWebsocketClosed();
@@ -119194,20 +119609,40 @@ let RH2Painter$2 = class RH2Painter extends RHistPainter {
    /** @summary Toggle projection */
    toggleProjection(kind, width) {
 
-      if (kind == 'Projections') kind = '';
+      if ((kind == 'Projections') || (kind == 'Off'))
+         kind = '';
 
-      if (isStr(kind) && (kind.length > 1)) {
-          width = parseInt(kind.slice(1));
-          kind = kind[0];
+      let widthX = width, widthY = width;
+
+      if (isStr(kind) && (kind.indexOf('XY') == 0)) {
+         let ws = kind.length > 2 ? kind.slice(2) : '';
+         kind = 'XY';
+         widthX = widthY = parseInt(ws);
+      } else if (isStr(kind) && (kind.length > 1)) {
+         let ps = kind.indexOf('_');
+         if ((ps > 0) && (kind[0] == 'X') && (kind[ps+1] == 'Y')) {
+            widthX = parseInt(kind.slice(1, ps)) || 1;
+            widthY = parseInt(kind.slice(ps+2)) || 1;
+            kind = 'XY';
+         } else if ((ps > 0) && (kind[0] == 'Y') && (kind[ps+1] == 'X')) {
+            widthY = parseInt(kind.slice(1, ps)) || 1;
+            widthX = parseInt(kind.slice(ps+2)) || 1;
+            kind = 'XY';
+         } else {
+            widthX = widthY = parseInt(kind.slice(1)) || 1;
+            kind = kind[0];
+         }
       }
 
-      if (!width) width = 1;
+      if (!widthX && !widthY)
+         widthX = widthY = 1;
 
-      if (kind && (this.is_projection==kind)) {
-         if (this.projection_width === width) {
+      if (kind && (this.is_projection == kind)) {
+         if ((this.projection_widthX === widthX) && (this.projection_widthY === widthY)) {
             kind = '';
          } else {
-            this.projection_width = width;
+            this.projection_widthX = widthX;
+            this.projection_widthY = widthY;
             return;
          }
       }
@@ -119215,8 +119650,9 @@ let RH2Painter$2 = class RH2Painter extends RHistPainter {
       delete this.proj_hist;
 
       let new_proj = (this.is_projection === kind) ? '' : kind;
-      this.is_projection = ''; // disable projection redraw until callback
-      this.projection_width = width;
+      this.projection_widthX = widthX;
+      this.projection_widthY = widthY;
+      this.is_projection = ''; // avoid projection handling until area is created
 
       this.provideSpecialDrawArea(new_proj).then(() => { this.is_projection = new_proj; return this.redrawProjection(); });
    }
@@ -119242,10 +119678,16 @@ let RH2Painter$2 = class RH2Painter extends RHistPainter {
 
    /** @summary Fill histogram context menu */
    fillHistContextMenu(menu) {
-      menu.add('sub:Projections', () => this.toggleProjection());
       let kind = this.is_projection || '';
-      if (kind) kind += this.projection_width;
-      let kinds = ['X1', 'X2', 'X3', 'X5', 'X10', 'Y1', 'Y2', 'Y3', 'Y5', 'Y10'];
+      if (kind) kind += this.projection_widthX;
+      if ((this.projection_widthX != this.projection_widthY) && (this.is_projection == 'XY'))
+         kind = `X${this.projection_widthX}_Y${this.projection_widthY}`;
+
+      menu.add('sub:Projections', () => menu.input('Input projection kind X1 or XY2 or X3_Y4', kind, 'string').then(val => this.toggleProjection(val)));
+
+      let kinds = ['X1', 'X2', 'X3', 'X5', 'X10', 'Y1', 'Y2', 'Y3', 'Y5', 'Y10', 'XY1', 'XY2', 'XY3', 'XY5', 'XY10'];
+      if (kind) kinds.unshift('Off');
+
       for (let k = 0; k < kinds.length; ++k)
          menu.addchk(kind == kinds[k], kinds[k], kinds[k], arg => this.toggleProjection(arg));
       menu.add('endsub:');
@@ -120378,14 +120820,15 @@ let RH2Painter$2 = class RH2Painter extends RHistPainter {
                   color2: this.fillatt?.getFillColorAlt('blue') ?? 'blue',
                   lines: this.getBinTooltips(i, j), exact: true, menu: true };
 
-      if (this.options.Color) res.color2 = h.palette.getColor(colindx);
+      if (this.options.Color)
+         res.color2 = h.palette.getColor(colindx);
 
       if (pnt.disabled && !this.is_projection) {
          ttrect.remove();
          res.changed = true;
       } else {
          if (ttrect.empty())
-            ttrect = this.draw_g.append('svg:rect')
+            ttrect = this.draw_g.append('svg:path')
                                 .attr('class','tooltip_bin h1bin')
                                 .style('pointer-events','none');
 
@@ -120393,35 +120836,42 @@ let RH2Painter$2 = class RH2Painter extends RHistPainter {
              j1 = j, j2 = j+1,
              x1 = h.grx[i1], x2 = h.grx[i2],
              y1 = h.gry[j2], y2 = h.gry[j1],
-             binid = i*10000 + j;
+             binid = i*10000 + j,
+             pmain = this.getFramePainter(),
+             path;
+
+         if (this.is_projection) {
+            let pwx = this.projection_widthX || 1, ddx = (pwx - 1) / 2;
+            if ((this.is_projection.indexOf('X')) >= 0 && (pwx > 1)) {
+               if (j2+ddx >= h.j2) { j2 = Math.min(Math.round(j2+ddx), h.j2); j1 = Math.max(j2-pwx, h.j1); }
+                              else { j1 = Math.max(Math.round(j1-ddx), h.j1); j2 = Math.min(j1+pwx, h.j2); }
+            }
+            let pwy = this.projection_widthY || 1, ddy = (pwy - 1) / 2;
+            if ((this.is_projection.indexOf('Y')) >= 0 && (pwy > 1)) {
+               if (i2+ddy >= h.i2) { i2 = Math.min(Math.round(i2+ddy), h.i2); i1 = Math.max(i2-pwy, h.i1); }
+                              else { i1 = Math.max(Math.round(i1-ddy), h.i1); i2 = Math.min(i1+pwy, h.i2); }
+            }
+         }
 
          if (this.is_projection == 'X') {
-            x1 = 0; x2 = this.getFramePainter().getFrameWidth();
-            if (this.projection_width > 1) {
-               let dd = (this.projection_width-1)/2;
-               if (j2+dd >= h.j2) { j2 = Math.min(Math.round(j2+dd), h.j2); j1 = Math.max(j2 - this.projection_width, h.j1); }
-                             else { j1 = Math.max(Math.round(j1-dd), h.j1); j2 = Math.min(j1 + this.projection_width, h.j2); }
-            }
+            x1 = 0; x2 = pmain.getFrameWidth();
             y1 = h.gry[j2]; y2 = h.gry[j1];
             binid = j1*777 + j2*333;
          } else if (this.is_projection == 'Y') {
-            y1 = 0; y2 = this.getFramePainter().getFrameHeight();
-            if (this.projection_width > 1) {
-               let dd = (this.projection_width-1)/2;
-               if (i2+dd >= h.i2) { i2 = Math.min(Math.round(i2+dd), h.i2); i1 = Math.max(i2 - this.projection_width, h.i1); }
-                             else { i1 = Math.max(Math.round(i1-dd), h.i1); i2 = Math.min(i1 + this.projection_width, h.i2); }
-            }
-            x1 = h.grx[i1], x2 = h.grx[i2],
+            y1 = 0; y2 = pmain.getFrameHeight();
+            x1 = h.grx[i1]; x2 = h.grx[i2];
             binid = i1*777 + i2*333;
+         } else if (this.is_projection == 'XY') {
+            y1 = h.gry[j2]; y2 = h.gry[j1];
+            x1 = h.grx[i1]; x2 = h.grx[i2];
+            binid = i1*789 + i2*653 + j1*12345 + j2*654321;
+            path = `M${x1},0H${x2}V${y1}H${pmain.getFrameWidth()}V${y2}H${x2}V${pmain.getFrameHeight()}H${x1}V${y2}H0V${y1}H${x1}Z`;
          }
 
          res.changed = ttrect.property('current_bin') !== binid;
 
          if (res.changed)
-            ttrect.attr('x', x1)
-                  .attr('width', x2 - x1)
-                  .attr('y', y1)
-                  .attr('height', y2 - y1)
+            ttrect.attr('d', path || `M${x1},${y1}H${x2}V${y2}H${x1}Z`)
                   .style('opacity', '0.7')
                   .property('current_bin', binid);
 

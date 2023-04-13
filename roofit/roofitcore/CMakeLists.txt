@@ -20,10 +20,14 @@ endif()
 
 ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
   HEADERS
+    RooFit/Config.h
     RooFit/Detail/AnalyticalIntegrals.h
+    RooFit/Detail/EvaluateFuncs.h
+    RooFit/Detail/CodeSquashContext.h
     RooFit/Detail/DataMap.h
     RooFit/Detail/NormalizationHelpers.h
     RooFit/Floats.h
+    RooFit/ModelConfig.h
     Roo1DTable.h
     RooAbsAnaConvPdf.h
     RooAbsArg.h
@@ -251,6 +255,7 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
     src/Buffers.cxx
     src/BidirMMapPipe.cxx
     src/BidirMMapPipe.h
+    src/ModelConfig.cxx
     src/NormalizationHelpers.cxx
     src/Roo1DTable.cxx
     src/RooAbsAnaConvPdf.cxx

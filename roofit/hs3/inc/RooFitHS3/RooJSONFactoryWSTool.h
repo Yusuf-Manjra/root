@@ -21,10 +21,7 @@
 #include <RooWorkspace.h>
 
 #include <map>
-#include <memory>
 #include <stdexcept>
-#include <string>
-#include <vector>
 
 namespace RooFit {
 namespace JSONIO {
@@ -37,7 +34,6 @@ namespace RooStats {
 class ModelConfig;
 }
 
-class TH1;
 class TClass;
 
 class RooJSONFactoryWSTool {
@@ -105,59 +101,20 @@ public:
    RooWorkspace *workspace() { return &_workspace; }
 
    template <class Obj_t>
-   void wsImport(Obj_t const &arg)
+   Obj_t &wsImport(Obj_t const &obj)
    {
-      _workspace.import(arg, RooFit::RecycleConflictNodes(true), RooFit::Silence(true));
+      _workspace.import(obj, RooFit::RecycleConflictNodes(true), RooFit::Silence(true));
+      return *static_cast<Obj_t *>(_workspace.obj(obj.GetName()));
    }
 
    template <class Obj_t, typename... Args_t>
-   void wsEmplace(RooStringView name, RooStringView title, Args_t &&...args)
+   Obj_t &wsEmplace(RooStringView name, Args_t &&...args)
    {
-      Obj_t arg{name, title, std::forward<Args_t>(args)...};
-      return wsImport(arg);
+      return wsImport(Obj_t(name, name, std::forward<Args_t>(args)...));
    }
 
    static void error(const char *s);
    inline static void error(const std::string &s) { error(s.c_str()); }
-   template <class T>
-   static std::string concat(const T *items, const std::string &sep = ",")
-   {
-      // Returns a string being the concatenation of strings in input list <items>
-      // (names of objects obtained using GetName()) separated by string <sep>.
-      bool first = true;
-      std::string text;
-
-      // iterate over strings in list
-      for (auto it : *items) {
-         if (!first) {
-            // insert separator string
-            text += sep;
-         } else {
-            first = false;
-         }
-         if (!it)
-            text += "nullptr";
-         else
-            text += it->GetName();
-      }
-      return text;
-   }
-   template <class T>
-   static std::vector<std::string> names(T const &items)
-   {
-      // Returns a string being the concatenation of strings in input list <items>
-      // (names of objects obtained using GetName()) separated by string <sep>.
-      std::vector<std::string> names;
-      // iterate over strings in list
-      for (auto it : items) {
-         names.push_back(it ? it->GetName() : "nullptr");
-      }
-      return names;
-   }
-
-   static void exportHistogram(const TH1 &h, RooFit::Detail::JSONNode &n, const std::vector<std::string> &obsnames,
-                               const TH1 *errH = nullptr, bool writeObservables = true, bool writeErrors = true);
-   static void writeObservables(const TH1 &h, RooFit::Detail::JSONNode &n, const std::vector<std::string> &varnames);
 
    static std::unique_ptr<RooDataHist> readBinnedData(const RooFit::Detail::JSONNode &n, const std::string &namecomp);
    static std::unique_ptr<RooDataHist>
@@ -203,22 +160,23 @@ public:
    static void
    writeCombinedDataName(RooFit::Detail::JSONNode &rootnode, std::string const &pdfName, std::string const &dataName);
 
-   static void writeChannelNames(RooFit::Detail::JSONNode &rootnode, std::string const &simPdfName,
-                                 std::vector<std::string> const &channelNames);
+   static void
+   exportHisto(RooArgSet const &vars, std::size_t n, double const *contents, RooFit::Detail::JSONNode &output);
+
+   static void exportArray(std::size_t n, double const *contents, RooFit::Detail::JSONNode &output);
+
+   static void exportCategory(RooAbsCategory const &cat, RooFit::Detail::JSONNode &node);
+
+   void queueExport(RooAbsArg const &arg) { _serversToExport.push_back(&arg); }
 
 private:
-   struct Config {
-      static bool stripObservables;
-   };
-
    template <class T>
    T *requestImpl(const std::string &objname);
 
-   void exportData(RooAbsData &data);
+   void exportData(RooAbsData const &data);
 
    void importAllNodes(const RooFit::Detail::JSONNode &n);
 
-   void importVariables(const RooFit::Detail::JSONNode &n);
    void importVariable(const RooFit::Detail::JSONNode &n);
    void importDependants(const RooFit::Detail::JSONNode &n);
 
@@ -238,5 +196,6 @@ private:
 
    // objects to represent intermediate information
    std::unique_ptr<RooFit::JSONIO::Detail::Domains> _domains;
+   std::vector<RooAbsArg const *> _serversToExport;
 };
 #endif

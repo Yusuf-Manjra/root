@@ -635,8 +635,11 @@ Multi-dimensional arrays of the form `T[N][M]...` are currently not supported.
 #### std::variant<T1, T2, ..., Tn>
 
 Variants are stored in $n+1$ fields:
-  - Variant mother field of type Switch; the dispatch tag points to the principle column of the active type
+  - Variant mother field with one column of type Switch; the dispatch tag points to the principal column of the active type
   - Child fields of types `T1`, ..., `Tn`; their names are `_0`, `_1`, ...
+
+The dispatch tag ranges from 1 to $n$.
+A value of 0 indicates that the variant is in the invalid state, i.e., it does not hold any of the valid alternatives.
 
 #### std::pair<T1, T2>
 
@@ -647,6 +650,12 @@ The child fileds are named `_0` and `_1`.
 
 A tuple is stored using an empty mother field with $n$ subfields of type `T1`, `T2`, ..., `Tn`. All types must have RNTuple I/O support.
 The child fileds are named `_0`, `_1`, ...
+
+#### std::bitset<N>
+
+A bitset is stored as a repetitive leaf field with an attached `Bit` column.
+The bitset size `N` is stored as repetition parameter in the field meta-data.
+Within the repetition blocks, bits are stored in little-endian order, i.e. the least significant bits come first.
 
 ### User-defined classes
 

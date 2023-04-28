@@ -854,21 +854,16 @@ bool RooAbsArg::dependsOn(const RooAbsCollection& serverList, const RooAbsArg* i
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Test whether we depend on (ie, are served by) the specified object.
-/// Note that RooAbsArg objects are considered equivalent if they have
-/// the same name.
-
-bool RooAbsArg::dependsOn(const RooAbsArg& testArg, const RooAbsArg* ignoreArg, bool valueOnly) const
+/// Test whether we depend on (ie, are served by) an object with a specific name.
+bool RooAbsArg::dependsOn(TNamed const* testArgNamePtr, const RooAbsArg* ignoreArg, bool valueOnly) const
 {
   if (this==ignoreArg) return false ;
 
   // First check if testArg is self
-  //if (!TString(testArg.GetName()).CompareTo(GetName())) return true ;
-  if (testArg.namePtr()==namePtr()) return true ;
-
+  if (testArgNamePtr == namePtr()) return true ;
 
   // Next test direct dependence
-  RooAbsArg* foundServer = findServer(testArg) ;
+  RooAbsArg *foundServer = _serverList.findByNamePointer(testArgNamePtr);
   if (foundServer) {
 
     // Return true if valueOnly is FALSE or if server is value server, otherwise keep looking
@@ -880,7 +875,7 @@ bool RooAbsArg::dependsOn(const RooAbsArg& testArg, const RooAbsArg* ignoreArg, 
   // If not, recurse
   for (const auto server : _serverList) {
     if ( !valueOnly || server->isValueServer(*this)) {
-      if (server->dependsOn(testArg,ignoreArg,valueOnly)) {
+      if (server->dependsOn(testArgNamePtr,ignoreArg,valueOnly)) {
         return true ;
       }
     }
@@ -2257,32 +2252,12 @@ bool RooAbsArg::addOwnedComponents(RooArgList&& comps) {
 
 RooAbsArg* RooAbsArg::cloneTree(const char* newname) const
 {
-  // Clone tree using snapshot
-  RooArgSet clonedNodes;
-  RooArgSet(*this).snapshot(clonedNodes, true);
-
-  // Find the head node in the cloneSet
-  RooAbsArg* head = clonedNodes.find(*this) ;
-  assert(head);
-
-  // We better to release the ownership before removing the "head". Otherwise,
-  // "head" might also be deleted as the clonedNodes collection owns it.
-  // (Actually this does not happen because even an owning collection doesn't
-  // delete the element when removed by pointer lookup, but it's better not to
-  // rely on this unexpected fact).
-  clonedNodes.releaseOwnership();
-
-  // Remove the head node from the cloneSet
-  // To release it from the set ownership
-  clonedNodes.remove(*head) ;
-
-  // Add the set as owned component of the head
-  head->addOwnedComponents(std::move(clonedNodes)) ;
+  // In the RooHelpers, there is a more general implementation that we will reuse here
+  RooAbsArg *head = RooHelpers::Detail::cloneTreeWithSameParametersImpl(*this, nullptr);
 
   // Adjust name of head node if requested
   if (newname) {
-    head->TNamed::SetName(newname) ;
-    head->_namePtr = RooNameReg::instance().constPtr(newname) ;
+    head->SetName(newname) ;
   }
 
   // Return the head

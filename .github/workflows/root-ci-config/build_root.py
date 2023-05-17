@@ -126,6 +126,13 @@ def main():
 
     shell_log = build(options, args.buildtype, shell_log)
 
+    # Build artifacts should only be uploaded for full builds, and only for
+    # "official" branches (master, v?-??-??-patches), i.e. not for pull_request
+    # We also want to upload any successful build, even if it fails testing
+    # later on.
+    if not pull_request and not args.incremental:
+        archive_and_upload(yyyy_mm_dd, obj_prefix)
+
     testing: bool = options_dict['testing'].lower() == "on" and options_dict['roottest'].lower() == "on"
 
     if testing:
@@ -136,11 +143,6 @@ def main():
             extra_ctest_flags += "--build-config " + args.buildtype
 
         shell_log = run_ctest(shell_log, extra_ctest_flags)
-
-    # Build artifacts should only be uploaded for full builds, and only for "official" branches
-    # (master, v?-??-??-patches), i.e. not for pull_request
-    if not pull_request and not args.incremental:
-        archive_and_upload(yyyy_mm_dd, obj_prefix)
 
     print_shell_log(shell_log)
 
@@ -245,11 +247,11 @@ def show_node_state(shell_log: str, options: str) -> str:
 def run_ctest(shell_log: str, extra_ctest_flags: str) -> str:
     result, shell_log = subprocess_with_log(f"""
         cd '{WORKDIR}/build'
-        ctest --parallel {os.cpu_count()} --output-junit TestResults.xml {extra_ctest_flags}
+        ctest --output-on-failure --parallel {os.cpu_count()} --output-junit TestResults.xml {extra_ctest_flags}
     """, shell_log)
 
     if result != 0:
-        print_warning("Some tests failed")
+        die(result, "Some tests failed", shell_log)
 
     return shell_log
 

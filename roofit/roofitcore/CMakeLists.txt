@@ -53,10 +53,8 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
     RooAbsProxy.h
     RooAbsReal.h
     RooAbsRealLValue.h
-    RooAbsRootFinder.h
     RooAbsSelfCachedPdf.h
     RooAbsSelfCachedReal.h
-    RooAbsString.h
     RooAbsStudy.h
     RooAbsTestStatistic.h
     RooAdaptiveIntegratorND.h
@@ -115,7 +113,6 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
     RooFirstMoment.h
     RooFit.h
     RooFitResult.h
-    RooFormula.h
     RooFormulaVar.h
     RooFracRemainder.h
     RooFunctor.h
@@ -123,7 +120,6 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
     RooGenContext.h
     RooGenericPdf.h
     RooGenFitStudy.h
-    RooGenProdProj.h
     RooGlobalFunc.h
     RooGrid.h
     RooHistError.h
@@ -197,7 +193,6 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
     RooRefCountList.h
     RooSTLRefCountList.h
     RooResolutionModel.h
-    RooScaledFunc.h
     RooSecondMoment.h
     RooSegmentedIntegrator1D.h
     RooSegmentedIntegrator2D.h
@@ -280,7 +275,6 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
     src/RooAbsProxy.cxx
     src/RooAbsReal.cxx
     src/RooAbsRealLValue.cxx
-    src/RooAbsRootFinder.cxx
     src/RooAbsStudy.cxx
     src/RooAbsTestStatistic.cxx
     src/RooAcceptReject.cxx
@@ -422,7 +416,6 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
     src/RooRefCountList.cxx
     src/RooSTLRefCountList.cxx
     src/RooResolutionModel.cxx
-    src/RooScaledFunc.cxx
     src/RooSecondMoment.cxx
     src/RooSegmentedIntegrator1D.cxx
     src/RooSegmentedIntegrator2D.cxx

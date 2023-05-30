@@ -804,6 +804,69 @@ public:
    void CommitCluster() final;
 };
 
+/// The field for values that may or may not be present in an entry. Parent class for unique pointer field and
+/// optional field. A nullable field cannot be instantiated itself but only its descendants.
+/// The RNullableField takes care of the on-disk representation. Child classes are responsible for the in-memory
+/// representation.  The on-disk representation can be "dense" or "sparse". Dense nullable fields have a bitmask
+/// (true: item available, false: item missing) and serialize a default-constructed item for missing items.
+/// Sparse nullable fields use a (Split)Index[64|32] column to point to the available items.
+/// By default, items whose size is smaller or equal to 4 bytes (size of (Split)Index32 column element) are stored
+/// densely.
+class RNullableField : public Detail::RFieldBase {
+   /// For a dense nullable field, used to write a default-constructed item for missing ones.
+   Detail::RFieldValue fDefaultItemValue;
+   /// For a sparse nullable field, the number of written non-null items in this cluster
+   ClusterSize_t fNWritten{0};
+
+protected:
+   const Detail::RFieldBase::RColumnRepresentations &GetColumnRepresentations() const final;
+   void GenerateColumnsImpl() final;
+   void GenerateColumnsImpl(const RNTupleDescriptor &) final;
+
+   std::size_t AppendNull();
+   std::size_t AppendValue(const Detail::RFieldValue &value);
+   /// Given the index of the nullable field, returns the corresponding global index of the subfield or,
+   /// if it is null, returns kInvalidClusterIndex
+   RClusterIndex GetItemIndex(NTupleSize_t globalIndex);
+
+   RNullableField(std::string_view fieldName, std::string_view typeName, std::unique_ptr<Detail::RFieldBase> itemField);
+
+public:
+   RNullableField(RNullableField &&other) = default;
+   RNullableField &operator=(RNullableField &&other) = default;
+   ~RNullableField() override;
+
+   bool IsDense() const { return GetColumnRepresentative()[0] ==  EColumnType::kBit; }
+   bool IsSparse() const { return !IsDense(); }
+   void SetDense() { SetColumnRepresentative({EColumnType::kBit}); }
+   void SetSparse() { SetColumnRepresentative({EColumnType::kSplitIndex32}); }
+
+   void CommitCluster() final { fNWritten = 0; }
+
+   void AcceptVisitor(Detail::RFieldVisitor &visitor) const final;
+};
+
+class RUniquePtrField : public RNullableField {
+protected:
+   std::unique_ptr<Detail::RFieldBase> CloneImpl(std::string_view newName) const final;
+   std::size_t AppendImpl(const Detail::RFieldValue &value) final;
+   void ReadGlobalImpl(NTupleSize_t globalIndex, Detail::RFieldValue *value) final;
+
+public:
+   RUniquePtrField(std::string_view fieldName, std::string_view typeName,
+                   std::unique_ptr<Detail::RFieldBase> itemField);
+   RUniquePtrField(RUniquePtrField &&other) = default;
+   RUniquePtrField &operator=(RUniquePtrField &&other) = default;
+   ~RUniquePtrField() override = default;
+
+   using Detail::RFieldBase::GenerateValue;
+   Detail::RFieldValue GenerateValue(void *where) override;
+   void DestroyValue(const Detail::RFieldValue &value, bool dtorOnly = false) final;
+   Detail::RFieldValue CaptureValue(void *where) final;
+   std::vector<Detail::RFieldValue> SplitValue(const Detail::RFieldValue &value) const final;
+   size_t GetValueSize() const final { return sizeof(std::unique_ptr<char>); }
+   size_t GetAlignment() const final { return alignof(std::unique_ptr<char>); }
+};
 
 /// Classes with dictionaries that can be inspected by TClass
 template <typename T, typename=void>
@@ -823,7 +886,15 @@ public:
    {
       return Detail::RFieldValue(this, static_cast<T *>(where), std::forward<ArgsT>(args)...);
    }
-   ROOT::Experimental::Detail::RFieldValue GenerateValue(void *where) final { return GenerateValue(where, T()); }
+   ROOT::Experimental::Detail::RFieldValue GenerateValue(void *where) final
+   {
+      if constexpr (std::is_default_constructible_v<T>) {
+         return GenerateValue(where, T());
+      } else {
+         // If there is no default constructor, try with the IO constructor
+         return GenerateValue(where, T(static_cast<TRootIOCtor *>(nullptr)));
+      }
+   }
 };
 
 template <typename T, typename = void>
@@ -2183,6 +2254,23 @@ public:
    {
       return Detail::RFieldValue(Detail::RColumnElement<std::bitset<N>>(static_cast<float *>(where)), this,
                                  static_cast<std::bitset<N> *>(where), std::forward<ArgsT>(args)...);
+   }
+};
+
+template <typename ItemT>
+class RField<std::unique_ptr<ItemT>> : public RUniquePtrField {
+public:
+   static std::string TypeName() { return "std::unique_ptr<" + RField<ItemT>::TypeName() + ">"; }
+   explicit RField(std::string_view name) : RUniquePtrField(name, TypeName(), std::make_unique<RField<ItemT>>("_0")) {}
+   RField(RField &&other) = default;
+   RField &operator=(RField &&other) = default;
+   ~RField() override = default;
+
+   using Detail::RFieldBase::GenerateValue;
+   template <typename... ArgsT>
+   ROOT::Experimental::Detail::RFieldValue GenerateValue(void *where, ArgsT &&...args)
+   {
+      return Detail::RFieldValue(this, static_cast<ItemT *>(where), std::forward<ArgsT>(args)...);
    }
 };
 

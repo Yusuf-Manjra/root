@@ -169,6 +169,8 @@ std::string GetNormalizedType(const std::string &typeName) {
       normalizedType = "std::" + normalizedType;
    if (normalizedType.substr(0, 7) == "bitset<")
       normalizedType = "std::" + normalizedType;
+   if (normalizedType.substr(0, 11) == "unique_ptr<")
+      normalizedType = "std::" + normalizedType;
 
    return normalizedType;
 }
@@ -321,6 +323,13 @@ ROOT::Experimental::Detail::RFieldBase::Create(const std::string &fieldName, con
    if (normalizedType.substr(0, 12) == "std::bitset<") {
       auto size = std::stoull(normalizedType.substr(12, normalizedType.length() - 13));
       result = std::make_unique<RBitsetField>(fieldName, size);
+   }
+   if (normalizedType.substr(0, 16) == "std::unique_ptr<") {
+      std::string itemTypeName = normalizedType.substr(16, normalizedType.length() - 17);
+      auto itemField = Create("_0", itemTypeName).Unwrap();
+      auto normalizedInnerTypeName = itemField->GetType();
+      result = std::make_unique<RUniquePtrField>(fieldName, "std::unique_ptr<" + normalizedInnerTypeName + ">",
+                                                 std::move(itemField));
    }
    // TODO: create an RCollectionField?
    if (normalizedType == ":Collection:")
@@ -2317,6 +2326,194 @@ size_t ROOT::Experimental::RVariantField::GetValueSize() const
 void ROOT::Experimental::RVariantField::CommitCluster()
 {
    std::fill(fNWritten.begin(), fNWritten.end(), 0);
+}
+
+//------------------------------------------------------------------------------
+
+ROOT::Experimental::RNullableField::RNullableField(std::string_view fieldName, std::string_view typeName,
+                                                   std::unique_ptr<Detail::RFieldBase> itemField)
+   : ROOT::Experimental::Detail::RFieldBase(fieldName, typeName, ENTupleStructure::kCollection, false /* isSimple */)
+{
+   Attach(std::move(itemField));
+}
+
+ROOT::Experimental::RNullableField::~RNullableField()
+{
+   if (fDefaultItemValue.GetField()) {
+      fDefaultItemValue.GetField()->DestroyValue(fDefaultItemValue);
+   }
+}
+
+const ROOT::Experimental::Detail::RFieldBase::RColumnRepresentations &
+ROOT::Experimental::RNullableField::GetColumnRepresentations() const
+{
+   static RColumnRepresentations representations(
+      {{EColumnType::kSplitIndex64}, {EColumnType::kIndex64}, {EColumnType::kSplitIndex32}, {EColumnType::kIndex32},
+       {EColumnType::kBit}}, {});
+   return representations;
+}
+
+void ROOT::Experimental::RNullableField::GenerateColumnsImpl()
+{
+   if (HasDefaultColumnRepresentative()) {
+      if (fSubFields[0]->GetValueSize() < 4) {
+         SetColumnRepresentative({EColumnType::kBit});
+      }
+   }
+   if (IsDense()) {
+      fDefaultItemValue = fSubFields[0]->GenerateValue();
+      fColumns.emplace_back(Detail::RColumn::Create<bool>(RColumnModel(EColumnType::kBit), 0));
+   } else {
+      fColumns.emplace_back(Detail::RColumn::Create<ClusterSize_t>(RColumnModel(GetColumnRepresentative()[0]), 0));
+   }
+}
+
+void ROOT::Experimental::RNullableField::GenerateColumnsImpl(const RNTupleDescriptor &desc)
+{
+   auto onDiskTypes = EnsureCompatibleColumnTypes(desc);
+   if (onDiskTypes[0] == EColumnType::kBit) {
+      fColumns.emplace_back(Detail::RColumn::Create<bool>(RColumnModel(EColumnType::kBit), 0));
+   } else {
+      fColumns.emplace_back(Detail::RColumn::Create<ClusterSize_t>(RColumnModel(onDiskTypes[0]), 0));
+   }
+}
+
+std::size_t ROOT::Experimental::RNullableField::AppendNull()
+{
+   if (IsDense()) {
+      bool mask = false;
+      Detail::RColumnElement<bool> maskElement(&mask);
+      fPrincipalColumn->Append(maskElement);
+      return 1 + fSubFields[0]->Append(fDefaultItemValue);
+   } else {
+      Detail::RColumnElement<ClusterSize_t> offsetElement(&fNWritten);
+      fPrincipalColumn->Append(offsetElement);
+      return sizeof(ClusterSize_t);
+   }
+}
+
+std::size_t ROOT::Experimental::RNullableField::AppendValue(const Detail::RFieldValue &value)
+{
+   auto nbytesItem = fSubFields[0]->Append(value);
+   if (IsDense()) {
+      bool mask = true;
+      Detail::RColumnElement<bool> maskElement(&mask);
+      fPrincipalColumn->Append(maskElement);
+      return 1 + nbytesItem;
+   } else {
+      fNWritten++;
+      Detail::RColumnElement<ClusterSize_t> offsetElement(&fNWritten);
+      fPrincipalColumn->Append(offsetElement);
+      return sizeof(ClusterSize_t) + nbytesItem;
+   }
+}
+
+ROOT::Experimental::RClusterIndex ROOT::Experimental::RNullableField::GetItemIndex(NTupleSize_t globalIndex)
+{
+   RClusterIndex nullIndex;
+   if (IsDense()) {
+      const bool isValidItem = *fPrincipalColumn->Map<bool>(globalIndex);
+      return isValidItem ? fPrincipalColumn->GetClusterIndex(globalIndex) : nullIndex;
+   } else {
+      RClusterIndex collectionStart;
+      ClusterSize_t collectionSize;
+      fPrincipalColumn->GetCollectionInfo(globalIndex, &collectionStart, &collectionSize);
+      return (collectionSize == 0) ? nullIndex : collectionStart;
+   }
+}
+
+void ROOT::Experimental::RNullableField::AcceptVisitor(Detail::RFieldVisitor &visitor) const
+{
+   visitor.VisitNullableField(*this);
+}
+
+//------------------------------------------------------------------------------
+
+ROOT::Experimental::RUniquePtrField::RUniquePtrField(std::string_view fieldName, std::string_view typeName,
+                                                     std::unique_ptr<Detail::RFieldBase> itemField)
+   : RNullableField(fieldName, typeName, std::move(itemField))
+{
+}
+
+std::unique_ptr<ROOT::Experimental::Detail::RFieldBase>
+ROOT::Experimental::RUniquePtrField::CloneImpl(std::string_view newName) const
+{
+   auto newItemField = fSubFields[0]->Clone(fSubFields[0]->GetName());
+   return std::make_unique<RUniquePtrField>(newName, GetType(), std::move(newItemField));
+}
+
+std::size_t ROOT::Experimental::RUniquePtrField::AppendImpl(const Detail::RFieldValue &value)
+{
+   auto typedValue = value.Get<std::unique_ptr<char>>();
+   if (*typedValue) {
+      auto itemValue = fSubFields[0]->CaptureValue(typedValue->get());
+      return AppendValue(itemValue);
+   } else {
+      return AppendNull();
+   }
+}
+
+void ROOT::Experimental::RUniquePtrField::ReadGlobalImpl(NTupleSize_t globalIndex, Detail::RFieldValue *value)
+{
+   auto ptr = value->Get<std::unique_ptr<char>>();
+   bool isValidValue = static_cast<bool>(*ptr);
+
+   auto itemIndex = GetItemIndex(globalIndex);
+   bool isValidItem = itemIndex.GetIndex() != kInvalidClusterIndex;
+
+   Detail::RFieldValue itemValue;
+   if (isValidValue)
+      itemValue = fSubFields[0]->CaptureValue(ptr->get());
+
+   if (isValidValue && !isValidItem) {
+      ptr->release();
+      fSubFields[0]->DestroyValue(itemValue, false /* dtorOnly */);
+      return;
+   }
+
+   if (!isValidItem) // On-disk value missing; nothing else to do
+      return;
+
+   if (!isValidValue) {
+      itemValue = fSubFields[0]->GenerateValue();
+      ptr->reset(itemValue.Get<char>());
+   }
+
+   fSubFields[0]->Read(itemIndex, &itemValue);
+}
+
+ROOT::Experimental::Detail::RFieldValue ROOT::Experimental::RUniquePtrField::GenerateValue(void *where)
+{
+   return Detail::RFieldValue(this, reinterpret_cast<std::unique_ptr<char> *>(where));
+}
+
+void ROOT::Experimental::RUniquePtrField::DestroyValue(const Detail::RFieldValue &value, bool dtorOnly)
+{
+   auto ptr = value.Get<std::unique_ptr<char>>();
+   if (*ptr) {
+      auto itemValue = fSubFields[0]->CaptureValue(ptr->get());
+      fSubFields[0]->DestroyValue(itemValue, false /* dtorOnly */);
+      ptr->release();
+   }
+   if (!dtorOnly)
+      free(ptr);
+}
+
+ROOT::Experimental::Detail::RFieldValue ROOT::Experimental::RUniquePtrField::CaptureValue(void *where)
+{
+   return Detail::RFieldValue(true /* captureFlag */, this, where);
+}
+
+std::vector<ROOT::Experimental::Detail::RFieldValue>
+ROOT::Experimental::RUniquePtrField::SplitValue(const Detail::RFieldValue &value) const
+{
+   std::vector<Detail::RFieldValue> result;
+   auto ptr = value.Get<std::unique_ptr<char>>();
+   if (*ptr) {
+      auto itemValue = fSubFields[0]->CaptureValue(ptr->get());
+      result.emplace_back(itemValue);
+   }
+   return result;
 }
 
 //------------------------------------------------------------------------------

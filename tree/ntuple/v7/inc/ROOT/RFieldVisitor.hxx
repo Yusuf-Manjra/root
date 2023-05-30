@@ -60,6 +60,7 @@ public:
    virtual void VisitInt16Field(const RField<std::int16_t> &field) { VisitField(field); }
    virtual void VisitIntField(const RField<int> &field) { VisitField(field); }
    virtual void VisitInt64Field(const RField<std::int64_t> &field) { VisitField(field); }
+   virtual void VisitNullableField(const RNullableField &field) { VisitField(field); }
    virtual void VisitStringField(const RField<std::string> &field) { VisitField(field); }
    virtual void VisitUInt16Field(const RField<std::uint16_t> &field) { VisitField(field); }
    virtual void VisitUInt32Field(const RField<std::uint32_t> &field) { VisitField(field); }
@@ -218,6 +219,7 @@ public:
    void VisitVectorBoolField(const RField<std::vector<bool>> &field) final;
    void VisitRVecField(const RRVecField &field) final;
    void VisitBitsetField(const RBitsetField &field) final;
+   void VisitNullableField(const RNullableField &field) final;
 };
 
 

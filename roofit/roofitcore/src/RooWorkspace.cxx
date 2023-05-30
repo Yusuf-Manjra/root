@@ -957,10 +957,10 @@ bool RooWorkspace::extendSet(const char* name, const char* newContents)
 /// Return pointer to previously defined named set with given nmame
 /// If no such set is found a null pointer is returned
 
-const RooArgSet* RooWorkspace::set(const char* name)
+const RooArgSet* RooWorkspace::set(RooStringView name)
 {
-  map<string,RooArgSet>::iterator i = _namedSets.find(name) ;
-  return (i!=_namedSets.end()) ? &(i->second) : 0 ;
+  std::map<string,RooArgSet>::iterator i = _namedSets.find(static_cast<const char*>(name));
+  return (i!=_namedSets.end()) ? &(i->second) : nullptr;
 }
 
 
@@ -1272,7 +1272,11 @@ RooArgSet RooWorkspace::argSet(RooStringView nameList) const
     if (oneArg) {
       ret.add(*oneArg) ;
     } else {
-      coutE(InputArguments) << " RooWorkspace::argSet(" << GetName() << ") no RooAbsArg named \"" << token << "\" in workspace" << endl ;
+      std::stringstream ss;
+      ss << " RooWorkspace::argSet(" << GetName() << ") no RooAbsArg named \"" << token << "\" in workspace" ;
+      const std::string errorMsg = ss.str();
+      coutE(InputArguments) << errorMsg << std::endl;
+      throw std::runtime_error(errorMsg);
     }
   }
   return ret ;

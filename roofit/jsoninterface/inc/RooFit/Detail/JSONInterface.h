@@ -57,8 +57,14 @@ public:
       Nd &operator*() const { return it->current(); }
       Nd &operator->() const { return it->current(); }
 
-      friend bool operator!=(child_iterator_t const &lhs, child_iterator_t const &rhs) { return !lhs.it->equal(*rhs.it); }
-      friend bool operator==(child_iterator_t const &lhs, child_iterator_t const &rhs) { return lhs.it->equal(*rhs.it); }
+      friend bool operator!=(child_iterator_t const &lhs, child_iterator_t const &rhs)
+      {
+         return !lhs.it->equal(*rhs.it);
+      }
+      friend bool operator==(child_iterator_t const &lhs, child_iterator_t const &rhs)
+      {
+         return lhs.it->equal(*rhs.it);
+      }
    };
 
    using child_iterator = child_iterator_t<JSONNode>;
@@ -81,8 +87,10 @@ public:
 
 public:
    virtual JSONNode &operator<<(std::string const &s) = 0;
+   inline JSONNode &operator<<(const char *s) { return *this << std::string(s); }
    virtual JSONNode &operator<<(int i) = 0;
    virtual JSONNode &operator<<(double d) = 0;
+   virtual JSONNode &operator<<(bool b) = 0;
    virtual const JSONNode &operator>>(std::string &v) const = 0;
    virtual JSONNode &operator[](std::string const &k) = 0;
    virtual JSONNode &operator[](size_t pos) = 0;
@@ -224,6 +232,27 @@ std::vector<T> &operator<<(std::vector<T> &v, RooFit::Detail::JSONNode const &n)
    }
    v << n.children();
    return v;
+}
+
+template <>
+inline int JSONNode::val_t<int>() const
+{
+   return val_int();
+}
+template <>
+inline double JSONNode::val_t<double>() const
+{
+   return val_double();
+}
+template <>
+inline bool JSONNode::val_t<bool>() const
+{
+   return val_bool();
+}
+template <>
+inline std::string JSONNode::val_t<std::string>() const
+{
+   return val();
 }
 
 } // namespace Detail

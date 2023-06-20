@@ -65,7 +65,7 @@ ClassImp(RooCurve);
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor.
 
-RooCurve::RooCurve() : _showProgress(false)
+RooCurve::RooCurve()
 {
   initialize();
 }
@@ -113,16 +113,12 @@ RooCurve::RooCurve(const RooAbsReal &f, RooAbsRealLValue &x, double xlo, double 
   std::unique_ptr<RooAbsFunc> funcPtr{scaledFunc.bindVars(x, normVars, true)};
 
   // calculate the points to add to our curve
-  double prevYMax = getYAxisMax() ;
   if(xbins > 0){
     // regular mode - use the sampling hint to decide where to evaluate the pdf
-    list<double>* hint = f.plotSamplingHint(x,xlo,xhi) ;
-    addPoints(*funcPtr,xlo,xhi,xbins+1,prec,resolution,wmode,nEvalError,doEEVal,eeVal,hint);
+    std::unique_ptr<std::list<double>> hint{f.plotSamplingHint(x,xlo,xhi)};
+    addPoints(*funcPtr,xlo,xhi,xbins+1,prec,resolution,wmode,nEvalError,doEEVal,eeVal,hint.get());
     if (_showProgress) {
       ccoutP(Plotting) << endl ;
-    }
-    if (hint) {
-      delete hint ;
     }
   } else {
     // if number of bins is set to <= 0, skip any interpolation and just evaluate the pdf at the bin centers
@@ -135,7 +131,7 @@ RooCurve::RooCurve(const RooAbsReal &f, RooAbsRealLValue &x, double xlo, double 
   }
   initialize();
 
-  if (shiftToZero) shiftCurveToZero(prevYMax) ;
+  if (shiftToZero) shiftCurveToZero() ;
 
   // Adjust limits
   for (int i=0 ; i<GetN() ; i++) {
@@ -155,15 +151,13 @@ RooCurve::RooCurve(const RooAbsReal &f, RooAbsRealLValue &x, double xlo, double 
 
 RooCurve::RooCurve(const char *name, const char *title, const RooAbsFunc &func,
          double xlo, double xhi, UInt_t minPoints, double prec, double resolution,
-         bool shiftToZero, WingMode wmode, Int_t nEvalError, Int_t doEEVal, double eeVal) :
-  _showProgress(false)
+         bool shiftToZero, WingMode wmode, Int_t nEvalError, Int_t doEEVal, double eeVal)
 {
   SetName(name);
   SetTitle(title);
-  double prevYMax = getYAxisMax() ;
   addPoints(func,xlo,xhi,minPoints+1,prec,resolution,wmode,nEvalError,doEEVal,eeVal);
   initialize();
-  if (shiftToZero) shiftCurveToZero(prevYMax) ;
+  if (shiftToZero) shiftCurveToZero() ;
 
   // Adjust limits
   for (int i=0 ; i<GetN() ; i++) {
@@ -187,8 +181,7 @@ RooCurve::RooCurve(const char *name, const char *title, const RooAbsFunc &func,
 /// \param[in] scale1 Scale y values for c1 by this factor.
 /// \param[in] scale2 Scale y values for c2 by this factor.
 
-RooCurve::RooCurve(const char* name, const char* title, const RooCurve& c1, const RooCurve& c2, double scale1, double scale2) :
-  _showProgress(false)
+RooCurve::RooCurve(const char* name, const char* title, const RooCurve& c1, const RooCurve& c2, double scale1, double scale2)
 {
   initialize() ;
   SetName(name) ;
@@ -230,14 +223,7 @@ RooCurve::RooCurve(const char* name, const char* title, const RooCurve& c1, cons
 }
 
 
-
-////////////////////////////////////////////////////////////////////////////////
-/// Destructor
-
-RooCurve::~RooCurve()
-{
-}
-
+RooCurve::~RooCurve() = default;
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -257,32 +243,29 @@ void RooCurve::initialize()
 /// Find lowest point in curve and move all points in curve so that
 /// lowest point will go exactly through zero
 
-void RooCurve::shiftCurveToZero(double prevYMax)
+void RooCurve::shiftCurveToZero()
 {
-  Int_t i ;
-  double minVal(1e30) ;
-  double maxVal(-1e30) ;
+   double minVal = std::numeric_limits<double>::infinity();
+   double maxVal = -std::numeric_limits<double>::infinity();
 
-  // First iteration, find current lowest point
-  for (i=1 ; i<GetN()-1 ; i++) {
-    double x,y ;
-    GetPoint(i,x,y) ;
-    if (y<minVal) minVal=y ;
-    if (y>maxVal) maxVal=y ;
-  }
+   // First iteration, find current lowest point
+   for (int i = 1; i < GetN() - 1; i++) {
+      double x;
+      double y;
+      GetPoint(i, x, y);
+      minVal = std::min(y, minVal);
+      maxVal = std::max(y, maxVal);
+   }
 
-  // Second iteration, lower all points by minVal
-  for (i=1 ; i<GetN()-1 ; i++) {
-    double x,y ;
-    GetPoint(i,x,y) ;
-    SetPoint(i,x,y-minVal) ;
-  }
+   // Second iteration, lower all points by minVal
+   for (int i = 1; i < GetN() - 1; i++) {
+      double x;
+      double y;
+      GetPoint(i, x, y);
+      SetPoint(i, x, y - minVal);
+   }
 
-  // Check if y-axis range needs readjustment
-  if (getYAxisMax()>prevYMax) {
-    double newMax = maxVal - minVal ;
-    setYAxisLimits(getYAxisMin(), newMax<prevYMax ? prevYMax : newMax) ;
-  }
+   setYAxisLimits(0, maxVal - minVal);
 }
 
 

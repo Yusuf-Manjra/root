@@ -1,6 +1,7 @@
 #ifndef ROOT7_RNTuple_Test_CustomStruct
 #define ROOT7_RNTuple_Test_CustomStruct
 
+#include <RtypesCore.h> // for Double32_t
 #include <TRootIOCtor.h>
 
 #include <cstdint>
@@ -43,9 +44,8 @@ struct StructWithArrays {
    float f[2];
 };
 
-struct EmptyBase {
-};
-struct alignas(std::uint64_t) TestEBO : public EmptyBase {
+struct EmptyStruct {};
+struct alignas(std::uint64_t) TestEBO : public EmptyStruct {
    std::uint64_t u64;
 };
 
@@ -62,6 +62,13 @@ public:
    IOConstructor(TRootIOCtor *) {};
 
    int a = 7;
+};
+
+class LowPrecisionFloats {
+public:
+   double a = 0.0;
+   Double32_t b = 1.0;
+   Double32_t c[2] = {2.0, 3.0};
 };
 
 /// The classes below are based on an excerpt provided by Marcin Nowak (EP-UAT)

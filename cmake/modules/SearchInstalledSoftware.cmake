@@ -916,6 +916,7 @@ if(fitsio OR builtin_cfitsio)
         TIMEOUT 600
       )
       set(CFITSIO_INCLUDE_DIR ${CMAKE_BINARY_DIR}/CFITSIO-prefix/src/CFITSIO)
+      install(DIRECTORY ${CMAKE_BINARY_DIR}/bin/ DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT libraries FILES_MATCHING PATTERN "cfitsio*.dll")
     else()
       ExternalProject_Add(
         CFITSIO
@@ -1047,24 +1048,6 @@ if(xrootd AND NOT builtin_xrootd AND builtin_openssl)
   else()
     message(STATUS "Non-builtin XROOTD must not be used with builtin OpenSSL. Disabling the 'xrootd' option.")
     set(xrootd OFF CACHE BOOL "Disabled because non-builtin xrootd cannot be used with builtin OpenSSL" FORCE)
-  endif()
-endif()
-
-#---Alien support----------------------------------------------------------------
-if(alien)
-  find_package(Alien)
-  if(NOT ALIEN_FOUND)
-    if(fail-on-missing)
-      message(FATAL_ERROR " Alien API not found and is required."
-        " Set the variable ALIEN_DIR to point to your Alien installation,"
-        " or include the installation of Alien in the CMAKE_PREFIX_PATH.")
-    else()
-      message(STATUS " Alien API not found."
-        " Set variable ALIEN_DIR to point to your Alien installation,"
-        " or include the installation of Alien in the CMAKE_PREFIX_PATH."
-        " For the time being switching OFF 'alien' option")
-      set(alien OFF CACHE BOOL "Disabled because Alien API not found (${alien_description})" FORCE)
-    endif()
   endif()
 endif()
 

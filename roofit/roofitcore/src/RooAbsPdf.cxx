@@ -177,6 +177,8 @@ called for each data event.
 #include "RooFit/TestStatistics/RooRealL.h"
 #include "RunContext.h"
 #include "ConstraintHelpers.h"
+#include "RooFitDriver.h"
+#include "RooSimultaneous.h"
 
 #include "ROOT/StringUtils.hxx"
 #include "TMath.h"
@@ -524,7 +526,7 @@ const RooAbsReal* RooAbsPdf::getNormObj(const RooArgSet* nset, const RooArgSet* 
   // If not create it now
   RooArgSet depList;
   getObservables(iset, depList);
-  RooAbsReal* norm = createIntegral(depList,*nset, *getIntegratorConfig(), RooNameReg::str(rangeName)) ;
+  RooAbsReal* norm = std::unique_ptr<RooAbsReal>{createIntegral(depList,*nset, *getIntegratorConfig(), RooNameReg::str(rangeName))}.release();
 
   // Store it in the cache
   cache = new CacheElem(*norm) ;
@@ -600,7 +602,7 @@ bool RooAbsPdf::syncNormalization(const RooArgSet* nset, bool adjustProxies) con
     const char* nr = (_normRangeOverride.Length()>0 ? _normRangeOverride.Data() : (_normRange.Length()>0 ? _normRange.Data() : 0)) ;
 
 //     cout << "RooAbsPdf::syncNormalization(" << GetName() << ") rangeName for normalization is " << (nr?nr:"<null>") << endl ;
-    RooAbsReal* normInt = createIntegral(depList,*getIntegratorConfig(),nr) ;
+    RooAbsReal* normInt = std::unique_ptr<RooAbsReal>{createIntegral(depList,*getIntegratorConfig(),nr)}.release();
     normInt->getVal() ;
 //     cout << "resulting normInt = " << normInt->GetName() << endl ;
 
@@ -1020,7 +1022,7 @@ RooFit::OwningPtr<RooAbsReal> RooAbsPdf::createNLL(RooAbsData& data, const RooLi
              .GlobalObservables(glObsSet)
              .GlobalObservablesTag(rangeName.c_str());
 
-      return RooFit::OwningPtr<RooAbsReal>{new RooFit::TestStatistics::RooRealL("likelihood", "", builder.build())};
+      return RooFit::Detail::owningPtr(std::make_unique<RooFit::TestStatistics::RooRealL>("likelihood", "", builder.build()));
   }
 
   // Decode command line arguments
@@ -1114,14 +1116,17 @@ RooFit::OwningPtr<RooAbsReal> RooAbsPdf::createNLL(RooAbsData& data, const RooLi
     TString oldNormRange = _normRange;
     setNormRange(rangeName);
 
-    auto normSet = new RooArgSet; // INTENTIONAL LEAK FOR NOW!
-    getObservables(data.get(), *normSet);
-    normSet->remove(projDeps, true, true);
+    RooArgSet normSet;
+    getObservables(data.get(), normSet);
+    normSet.remove(projDeps, true, true);
 
     this->setAttribute("SplitRange", splitRange);
     this->setStringAttribute("RangeName", rangeName);
 
-    std::unique_ptr<RooAbsPdf> pdfClone = RooFit::Detail::compileForNormSet(*this, *normSet);
+    RooFit::Detail::CompileContext ctx{normSet};
+    ctx.setLikelihoodMode(true);
+    std::unique_ptr<RooAbsArg> head = this->compileForNormSet(normSet, ctx);
+    std::unique_ptr<RooAbsPdf> pdfClone = std::unique_ptr<RooAbsPdf>{static_cast<RooAbsPdf *>(head.release())};
 
     // reset attributes
     this->setAttribute("SplitRange", false);
@@ -1143,17 +1148,25 @@ RooFit::OwningPtr<RooAbsReal> RooAbsPdf::createNLL(RooAbsData& data, const RooLi
        compiledConstr->addOwnedComponents(std::move(constr));
     }
 
-    return RooFit::OwningPtr<RooAbsReal>{RooFit::BatchModeHelpers::createNLL(
-            std::move(pdfClone),
+    auto nll = RooFit::BatchModeHelpers::createNLL(
+            *pdfClone,
             data,
             std::move(compiledConstr),
             rangeName ? rangeName : "",
             projDeps,
             ext,
             pc.getDouble("IntegrateBins"),
-            batchMode,
-            offset,
-            takeGlobalObservablesFromData).release()};
+            offset);
+
+    auto driver = std::make_unique<ROOT::Experimental::RooFitDriver>(*nll, batchMode);
+
+    auto driverWrapper = std::make_unique<ROOT::Experimental::RooAbsRealWrapper>(
+       std::move(driver), rangeName ? rangeName : "", dynamic_cast<RooSimultaneous *>(pdfClone.get()), takeGlobalObservablesFromData);
+    driverWrapper->setData(data, false);
+    driverWrapper->addOwnedComponents(std::move(nll));
+    driverWrapper->addOwnedComponents(std::move(pdfClone));
+
+    return RooFit::Detail::owningPtr<RooAbsReal>(std::move(driverWrapper));
   }
 
   // Construct NLL
@@ -1207,7 +1220,7 @@ RooFit::OwningPtr<RooAbsReal> RooAbsPdf::createNLL(RooAbsData& data, const RooLi
     nll->enableOffsetting(true) ;
   }
 
-  return RooFit::OwningPtr<RooAbsReal>{nll.release()};
+  return RooFit::Detail::owningPtr(std::move(nll));
 }
 
 
@@ -1427,7 +1440,7 @@ std::unique_ptr<RooFitResult> RooAbsPdf::minimizeNLL(RooAbsReal & nll,
   if (cfg.doSave) {
     auto name = std::string("fitresult_") + GetName() + "_" + data.GetName();
     auto title = std::string("Result of fit of p.d.f. ") + GetName() + " to dataset " + data.GetName();
-    ret.reset(m.save(name.c_str(),title.c_str()));
+    ret = std::unique_ptr<RooFitResult>{m.save(name.c_str(),title.c_str())};
     if((cfg.doSumW2==1 || cfg.doAsymptotic==1) && m.getNPar()>0) ret->setCovQual(corrCovQual);
   }
 
@@ -1736,7 +1749,7 @@ RooFit::OwningPtr<RooFitResult> RooAbsPdf::fitTo(RooAbsData& data, const RooLink
   cfg.enableParallelGradient = pc.getInt("enableParallelGradient");
   cfg.enableParallelDescent = pc.getInt("enableParallelDescent");
   cfg.timingAnalysis = pc.getInt("timingAnalysis");
-  return RooFit::OwningPtr<RooFitResult>{minimizeNLL(*nll, data, cfg).release()};
+  return RooFit::Detail::owningPtr(minimizeNLL(*nll, data, cfg));
 }
 
 
@@ -1744,7 +1757,7 @@ RooFit::OwningPtr<RooFitResult> RooAbsPdf::fitTo(RooAbsData& data, const RooLink
 ////////////////////////////////////////////////////////////////////////////////
 /// Calls RooAbsPdf::createChi2(RooDataSet& data, const RooLinkedList& cmdList) and returns fit result.
 
-RooFitResult* RooAbsPdf::chi2FitTo(RooDataHist& data, const RooLinkedList& cmdList)
+RooFit::OwningPtr<RooFitResult> RooAbsPdf::chi2FitTo(RooDataHist& data, const RooLinkedList& cmdList)
 {
   // Select the pdf-specific commands
   RooCmdConfig pc(Form("RooAbsPdf::chi2FitTo(%s)",GetName())) ;
@@ -3340,8 +3353,8 @@ RooFit::OwningPtr<RooAbsReal> RooAbsPdf::createCdf(const RooArgSet& iset, const 
     return createScanCdf(iset,nset,numScanBins,intOrder) ;
   }
   if (doScanNum) {
-    std::unique_ptr<RooRealIntegral> tmp{static_cast<RooRealIntegral*>(createIntegral(iset))} ;
-    Int_t isNum= (tmp->numIntRealVars().getSize()>0) ;
+    std::unique_ptr<RooAbsReal> tmp{createIntegral(iset)} ;
+    Int_t isNum= !static_cast<RooRealIntegral&>(*tmp).numIntRealVars().empty();
 
     if (isNum) {
       coutI(NumIntegration) << "RooAbsPdf::createCdf(" << GetName() << ") integration over observable(s) " << iset << " involves numeric integration," << endl
@@ -3362,7 +3375,7 @@ RooFit::OwningPtr<RooAbsReal> RooAbsPdf::createScanCdf(const RooArgSet& iset, co
   ivar->setBins(numScanBins,"numcdf") ;
   auto ret = std::make_unique<RooNumCdf>(name.c_str(),name.c_str(),*this,*ivar,"numcdf");
   ret->setInterpolationOrder(intOrder) ;
-  return RooFit::OwningPtr<RooAbsReal>{ret.release()};
+  return RooFit::Detail::owningPtr(std::move(ret));
 }
 
 
@@ -3591,9 +3604,22 @@ RooAbsPdf::compileForNormSet(RooArgSet const &normSet, RooFit::Detail::CompileCo
    // The direct servers are this pdf and the normalization integral, which
    // don't need to be compiled further.
    for (RooAbsArg *server : newArg->servers()) {
-      server->setAttribute("_COMPILED");
+      ctx.markAsCompiled(*server);
    }
-   newArg->setAttribute("_COMPILED");
+   ctx.markAsCompiled(*newArg);
    newArg->addOwnedComponents(std::move(pdfClone));
    return newArg;
+}
+
+/// Returns an object that represents the expected number of events for a given
+/// normalization set, similar to how createIntegral() returns an object that
+/// returns the integral. This is used to build the computation graph for the
+/// final likelihood.
+std::unique_ptr<RooAbsReal> RooAbsPdf::createExpectedEventsFunc(const RooArgSet * /*nset*/) const
+{
+   std::stringstream errMsg;
+   errMsg << "The pdf \"" << GetName() << "\" of type " << ClassName()
+          << " did not overload RooAbsPdf::createExpectedEventsFunc()!";
+   coutE(InputArguments) << errMsg.str() << std::endl;
+   return nullptr;
 }

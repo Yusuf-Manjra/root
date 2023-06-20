@@ -460,12 +460,11 @@ Int_t RooRealSumPdf::getAnalyticalIntegralWN(RooAbsReal const& caller, RooObjCac
   for (const auto elm : funcList) {
     const auto func = static_cast<RooAbsReal*>(elm);
 
-    RooAbsReal* funcInt = func->createIntegral(analVars,rangeName) ;
-    if(funcInt->InheritsFrom(RooRealIntegral::Class())) ((RooRealIntegral*)funcInt)->setAllowComponentSelection(true);
-    cache->_funcIntList.addOwned(*funcInt) ;
+    std::unique_ptr<RooAbsReal> funcInt{func->createIntegral(analVars,rangeName)};
+    if(auto funcRealInt = dynamic_cast<RooRealIntegral*>(funcInt.get())) funcRealInt->setAllowComponentSelection(true);
+    cache->_funcIntList.addOwned(std::move(funcInt));
     if (normSet && !normSet->empty()) {
-      RooAbsReal* funcNorm = func->createIntegral(*normSet) ;
-      cache->_funcNormList.addOwned(*funcNorm) ;
+      cache->_funcNormList.addOwned(std::unique_ptr<RooAbsReal>{func->createIntegral(*normSet)});
     }
   }
 
@@ -794,17 +793,24 @@ std::unique_ptr<RooAbsArg> RooRealSumPdf::compileForNormSet(RooArgSet const &nor
    std::unique_ptr<RooAbsPdf> pdfClone(static_cast<RooAbsPdf*>(this->Clone()));
    ctx.compileServers(*pdfClone, {});
 
-   auto depList = new RooArgSet; // INTENTIONAL LEAK FOR NOW!
-   pdfClone->getObservables(&normSet, *depList);
+   RooArgSet depList;
+   pdfClone->getObservables(&normSet, depList);
 
-   auto newArg = std::make_unique<RooNormalizedPdf>(*pdfClone, *depList);
+   auto newArg = std::make_unique<RooNormalizedPdf>(*pdfClone, depList);
 
    // The direct servers are this pdf and the normalization integral, which
    // don't need to be compiled further.
    for(RooAbsArg * server : newArg->servers()) {
-      server->setAttribute("_COMPILED");
+      ctx.markAsCompiled(*server);
    }
-   newArg->setAttribute("_COMPILED");
+   ctx.markAsCompiled(*newArg);
    newArg->addOwnedComponents(std::move(pdfClone));
    return newArg;
+}
+
+std::unique_ptr<RooAbsReal> RooRealSumPdf::createExpectedEventsFunc(const RooArgSet *nset) const
+{
+   if (nset == nullptr)
+      return nullptr;
+   return std::unique_ptr<RooAbsReal>{createIntegral(*nset, *getIntegratorConfig(), normRange())};
 }

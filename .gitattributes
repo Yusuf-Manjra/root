@@ -22,3 +22,5 @@ interpreter/llvm/** -text
 *.pdf binary
 *.root binary
 *.fits binary
+
+sonar-project.properties merge=ours
